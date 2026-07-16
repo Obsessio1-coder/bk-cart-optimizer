@@ -243,27 +243,45 @@ function dec(val) { return decodeURIComponent(val); }
 
 async function init() {
   loadState();
+  if (allRestaurants.length === 0) {
+    try {
+      var resp = await fetch(API_BASE + '/restaurants');
+      if (resp.ok) allRestaurants = await resp.json();
+    } catch (e) { /* ignore */ }
+  }
+  lookupRestaurantName();
   await fetchMenu();
   renderMenu();
   updateCart();
+}
+
+function lookupRestaurantName() {
+  if (restaurantName) return;
+  var found = allRestaurants.find(function(r) { return String(r.id) === restaurantId; });
+  if (found) {
+    restaurantName = found.name;
+    document.getElementById('storeLabel').textContent = restaurantName;
+  }
 }
 
 async function fetchMenu() {
   try {
     const resp = await fetch(API_BASE + '/menu?store=' + restaurantId + '&mode=auto');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    menuItems = await resp.json();
+    var data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    menuItems = data;
     menuByName = {};
     for (const item of menuItems) {
       menuByName[item.name.toLowerCase()] = item;
     }
     document.getElementById('storeLabel').textContent = restaurantName || restaurantId;
     document.getElementById('emptyState').classList.add('hidden');
+    return true;
   } catch (e) {
     console.warn('fetchMenu failed:', e);
-    menuItems = [];
-    menuByName = {};
-    document.getElementById('emptyState').classList.remove('hidden');
+    showToast('Меню не загружено: ' + e.message, 'warn');
+    return false;
   }
 }
 
@@ -368,12 +386,11 @@ function getItemIcon(item) {
 }
 
 function btnScrollToCat(el) {
-  var cat = dec(el.dataset.cat);
-  scrollToCat(cat);
+  scrollToCat(el.dataset.cat);
 }
 
-function scrollToCat(id) {
-  var el = document.getElementById('cat-' + id);
+function scrollToCat(encoded) {
+  var el = document.getElementById('cat-' + encoded);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -642,6 +659,8 @@ function btnSelectRestaurant(el) {
 
 async function selectRestaurant(id, name) {
   if (id == restaurantId) { closeStoreModal(); return; }
+  var oldId = restaurantId;
+  var oldName = restaurantName;
   restaurantId = String(id);
   restaurantName = name;
   closeStoreModal();
@@ -649,7 +668,15 @@ async function selectRestaurant(id, name) {
   showToast('Выбран ресторан: ' + name, 'ok');
   cart = {};
   saveState();
-  await fetchMenu();
+  var ok = await fetchMenu();
+  if (!ok) {
+    restaurantId = oldId;
+    restaurantName = oldName;
+    saveState();
+    document.getElementById('storeLabel').textContent = oldName || oldId;
+    showToast('Меню не загружено, ресторан не изменён', 'warn');
+    return;
+  }
   renderMenu();
   updateCart();
 }
@@ -804,7 +831,7 @@ function showResult(data) {
       var name = entry[0], info = entry[1];
       var priceDisplay = info.combo_only
         ? '<span class="font-black text-espresso text-[10px] text-sage">только в комбо</span>'
-        : '<span class="font-black text-espresso text-sm">' + safeFmtPrice(info.price * (info.count || 1)) + '</span>';
+        : '<span class="font-black text-espresso text-sm">' + fmtPrice(info.price * (info.count || 1)) + '</span>';
       html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3">' +
         '<div class="flex-1 min-w-0">' +
           '<p class="font-bold text-espresso text-xs truncate">' + name + (info.count > 1 ? ' x' + info.count : '') + '</p>' +
