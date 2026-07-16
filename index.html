@@ -822,8 +822,9 @@ function showResult(data) {
         '<div class="flex-1 min-w-0">' +
           '<p class="text-xs font-bold text-espresso/40 truncate">' + name + '</p>' +
           '<p class="font-extrabold text-sage-dark text-xs mt-0.5">' + info.coupon_name + '</p>' +
+          (info.count > 1 ? '<p class="text-[10px] text-espresso/25 font-bold mt-0.5">x' + info.count + '</p>' : '') +
         '</div>' +
-        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(info.price_kopecks / 100) + '</span>' +
+        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(info.price_kopecks / 100 * (info.count || 1)) + '</span>' +
       '</div>';
     }
     html += '</div>';

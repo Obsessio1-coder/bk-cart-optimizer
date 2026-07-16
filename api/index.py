@@ -414,10 +414,10 @@ def build_frontend_response(result):
         })
 
     mono_coupons = {}
-    for item_name in mono_used_items:
+    for item_name, cnt in mono_used_items.items():
         if item_name in mono_plan:
             cn, cp = mono_plan[item_name]
-            mono_coupons[item_name] = {"coupon_name": cn, "price_kopecks": round(cp * 100)}
+            mono_coupons[item_name] = {"coupon_name": cn, "price_kopecks": round(cp * 100), "count": cnt}
 
     remaining = {}
     for item_name, cnt in final_remaining.items():

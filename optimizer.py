@@ -490,14 +490,14 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
     best_state = None
 
     remaining_mono = order.copy()
-    mono_items_used = set()
+    mono_items_used = {}
     for item_name in list(remaining_mono.keys()):
         if item_name in mono_plan:
             remaining_mono[item_name] = 0
-            mono_items_used.add(item_name)
+            mono_items_used[item_name] = order[item_name]
     remaining_multi = Counter({k: v for k, v in remaining_mono.items() if v > 0})
     multi_added = _apply_multi_mono(remaining_multi, multi_mono_coupons, dish_idx)
-    initial_total = sum(mono_plan[i][1] for i in mono_items_used) if mono_items_used else 0.0
+    initial_total = sum(mono_plan[i][1] * cnt for i, cnt in mono_items_used.items()) if mono_items_used else 0.0
     initial_total += multi_added
     for item_name, cnt in remaining_multi.items():
         if cnt > 0:
@@ -583,7 +583,7 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
                 continue
 
             total_rem = 0.0
-            mono_used = set()
+            mono_used = {}
 
             # Сначала мульти-слот купоны (напр. 2 соуса за 99,99)
             total_rem += _apply_multi_mono(remaining, multi_mono_coupons, dish_idx)
@@ -594,7 +594,7 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
                     if item_name in mono_plan:
                         cnt = remaining[item_name]
                         total_rem += mono_plan[item_name][1] * cnt
-                        mono_used.add(item_name)
+                        mono_used[item_name] = cnt
                         remaining[item_name] = 0
                     else:
                         total_rem += effective_prices.get(item_name.lower(), 0) * remaining[item_name]
@@ -700,11 +700,11 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
         print(f"\n💡 {best_alt_tip}")
 
     if mono_used_items:
-        mono_cost = sum(best_mono[i][1] for i in mono_used_items)
+        mono_cost = sum(best_mono[i][1] * cnt for i, cnt in mono_used_items.items())
         print(f"\nМоно-купон ({mono_cost:.2f} руб):")
-        for item in mono_used_items:
+        for item, cnt in mono_used_items.items():
             cn, cp = best_mono[item]
-            print(f"  + {cn} → {item} @ {cp:.2f}")
+            print(f"  + {cn} → {item} x{cnt} @ {cp:.2f}")
 
     if best_combo:
         combo_total = best_costs["combo_total"]
@@ -749,11 +749,11 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
     print("=" * 70)
 
     if mono_used_items:
-        mono_cost = sum(mono_plan[i][1] for i in mono_used_items)
+        mono_cost = sum(mono_plan[i][1] * cnt for i, cnt in mono_used_items.items())
         print(f"\nМоно-купон ({mono_cost:.2f} руб):")
-        for item in mono_used_items:
+        for item, cnt in mono_used_items.items():
             cn, cp = mono_plan[item]
-            print(f"  + {cn} → {item} @ {cp:.2f}")
+            print(f"  + {cn} → {item} x{cnt} @ {cp:.2f}")
 
     if best_combo:
         combo_total = best_costs["combo_total"]
