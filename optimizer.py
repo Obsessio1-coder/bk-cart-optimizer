@@ -108,6 +108,31 @@ def _fuzzy_match(user_name, candidates):
             best_score, best = score, c
     return best if best_score >= 12 else None
 
+def _build_coupon_item_prices(struct):
+    """Build {name_lower: (price_in_rub, coupon_name)} from single-slot coupons in struct.
+
+    struct stores prices in kopecks — convert to rubles (÷100).
+    """
+    prices = {}
+    for code, entry in struct.get("coupons", {}).items():
+        slots = entry.get("slots", [])
+        if len(slots) != 1:
+            continue
+        for d in slots[0].get("dishes", []):
+            name = (d.get("name") or d.get("menu_name", "")).strip()
+            if not name:
+                continue
+            price_kop = d.get("price", 0)
+            if price_kop == 0:
+                continue
+            key = name.lower()
+            cname = entry.get("name", code)
+            price_rub = price_kop / 100
+            if key not in prices or price_rub < prices[key][0]:
+                prices[key] = (price_rub, cname)
+    return prices
+
+
 def match_item(query, idx):
     q = query.strip().lower()
     if q in idx:
@@ -294,7 +319,7 @@ def _apply_multi_mono(remaining, multi_mono_coupons, dish_idx):
 
 # ── внутренний оптимизатор для одной корзины ────────────────────────
 
-def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, menu_prices):
+def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, menu_prices, coupon_only_prices=None):
     """Запускает моно-купон + комбо-поиск для переданной корзины order.
 
     order:           Counter вида {matched_name: count}
@@ -399,6 +424,14 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
             if cprice < effective_prices.get(item_name.lower(), 999):
                 effective_prices[item_name.lower()] = cprice
                 mono_plan[item_name] = (cname, cprice)
+
+    if coupon_only_prices:
+        for name_lower, (cp, cn) in coupon_only_prices.items():
+            for orig_name in order:
+                if orig_name.lower() == name_lower:
+                    mono_plan[orig_name] = (cn, cp)
+                    effective_prices[name_lower] = cp
+                    break
 
     indiv_eff = sum(effective_prices.get(n.lower(), 0) * c for n, c in order.items())
 
@@ -622,12 +655,21 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
     combo_prices, combo_skipped = build_combo_prices(menu, rid)
     menu_id_set = build_menu_id_set(menu)
 
+    # ── Coupon-only item prices from struct ──
+    coupon_item_prices = _build_coupon_item_prices(struct)
+
     # Матчинг заказа
     matched_names = []
+    coupon_only_added = {}
     for item in wanted_list:
         name = match_item(item, dish_idx)
         if name:
             matched_names.append(name)
+        elif item.lower() in coupon_item_prices:
+            cp, cn = coupon_item_prices[item.lower()]
+            print(f"  [COUPON ONLY] {item} -> {cn} @ {cp:.2f}")
+            matched_names.append(item)
+            coupon_only_added[item.lower()] = (cp, cn)
         else:
             print(f"НЕ НАЙДЕНО: {item}")
     if not matched_names:
@@ -639,6 +681,8 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
         e = dish_idx.get(n.lower())
         if e and e["price"] > 0 and not e.get("combo_only"):
             menu_prices[n.lower()] = e["price"]
+        elif n.lower() in coupon_only_added:
+            menu_prices[n.lower()] = coupon_only_added[n.lower()][0]
 
     indiv_total = sum(menu_prices.get(n.lower(), 0) * c for n, c in order.items())
 
@@ -649,7 +693,8 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
     for n, c in sorted(order.items()):
         p = menu_prices.get(n.lower(), 0)
         co = " [только в комбо]" if dish_idx.get(n.lower(), {}).get("combo_only") else ""
-        print(f"  {n} x{c} @ {p:.2f}{co}")
+        co2 = " [купон]" if n.lower() in coupon_only_added else ""
+        print(f"  {n} x{c} @ {p:.2f}{co}{co2}")
     print(f"  Без скидок: {indiv_total:.2f} руб")
 
     # ── Генерация альтернативных корзин ──
@@ -663,6 +708,7 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
     # ── Оптимизация для всех корзин ──
     best_total, best_state, best_eff, best_mono, _ = _optimize_cart(
         order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, menu_prices,
+        coupon_only_prices=coupon_only_added,
     )
     best_alt_tip = ""
     used_alternative = False
