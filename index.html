@@ -91,6 +91,17 @@ tailwind.config = {
     opacity: 0; transform: translateY(12px); pointer-events: none;
   }
   .scroll-top-btn.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .scroll-cart-btn {
+    position: fixed; bottom: 78px; right: 24px; z-index: 40;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: #D97706; color: white; border: none;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(217,119,6,0.3);
+    cursor: pointer; transition: transform 0.2s, opacity 0.3s;
+    opacity: 0; transform: translateY(12px); pointer-events: none;
+  }
+  .scroll-cart-btn.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .scroll-cart-btn:active { transform: scale(0.9); }
   .scroll-top-btn:active { transform: scale(0.9); }
 </style>
 </head>
@@ -215,6 +226,10 @@ tailwind.config = {
 
 <button id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})" class="scroll-top-btn" aria-label="Наверх">
   <i class="fas fa-chevron-up"></i>
+</button>
+
+<button id="scrollCartBtn" onclick="document.getElementById('cartSection').scrollIntoView({behavior:'smooth',block:'start'});" class="scroll-cart-btn" aria-label="К корзине">
+  <i class="fas fa-shopping-bag"></i>
 </button>
 
 <div id="loaderOverlay" class="fixed inset-0 z-[60] bg-espresso/60 backdrop-blur-md hidden flex items-center justify-center">
@@ -565,6 +580,8 @@ function updateCart() {
   }).join('');
 
   cartTotal.textContent = fmtPriceKop(sum);
+  var cartBtn = document.getElementById('scrollCartBtn');
+  if (cartBtn) cartBtn.classList.toggle('visible', entries.length > 0 && window.scrollY > 100);
 }
 
 function btnCartChange(el) {
@@ -923,8 +940,11 @@ function loadState() {
 document.addEventListener('DOMContentLoaded', function() {
   init();
   var scrollBtn = document.getElementById('scrollTopBtn');
+  var cartBtn = document.getElementById('scrollCartBtn');
   window.addEventListener('scroll', function() {
     scrollBtn.classList.toggle('visible', window.scrollY > 300);
+    var hasCart = Object.keys(cart).length > 0;
+    cartBtn.classList.toggle('visible', hasCart && window.scrollY > 100);
   });
 });
 </script>
