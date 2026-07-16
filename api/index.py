@@ -428,7 +428,7 @@ def build_frontend_response(result):
     return {
         "menu_total": menu_total_kop,
         "best_total": best_total_kop,
-        "savings_kopecks": round(savings * 100),
+        "savings": round(savings * 100),
         "plan": {
             "combos": combos_list,
             "mono_coupons": mono_coupons,

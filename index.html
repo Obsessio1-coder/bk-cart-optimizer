@@ -728,14 +728,14 @@ function showResult(data) {
   html += '<div class="flex items-center gap-4 mb-5 bg-white rounded-3xl p-5 shadow-sm border border-espresso/5">' +
     '<div class="flex-1">' +
       '<p class="text-xs font-bold text-espresso/30 uppercase tracking-wider mb-1">Обычная цена</p>' +
-      '<p class="font-black text-espresso/30 text-xl line-through decoration-2">' + fmtPrice(data.menu_total) + '</p>' +
+      '<p class="font-black text-espresso/30 text-xl line-through decoration-2">' + fmtPrice(data.menu_total / 100) + '</p>' +
     '</div>' +
     '<div class="w-10 h-10 bg-cream rounded-2xl flex items-center justify-center">' +
       '<i class="fas fa-arrow-right text-espresso/20"></i>' +
     '</div>' +
     '<div class="flex-1 text-right">' +
       '<p class="text-xs font-bold text-sage uppercase tracking-wider mb-1">С выгодой</p>' +
-      '<p class="font-black text-sage text-2xl">' + fmtPrice(data.best_total) + '</p>' +
+      '<p class="font-black text-sage text-2xl">' + fmtPrice(data.best_total / 100) + '</p>' +
     '</div>' +
   '</div>';
 
@@ -746,7 +746,7 @@ function showResult(data) {
       '</div>' +
       '<div>' +
         '<p class="text-xs font-bold text-sage-dark/60 uppercase tracking-wider">Вы экономите</p>' +
-        '<p class="font-black text-sage-dark text-xl">' + fmtPrice(data.savings) + '</p>' +
+        '<p class="font-black text-sage-dark text-xl">' + fmtPrice(data.savings / 100) + '</p>' +
       '</div>' +
     '</div>';
   }
@@ -767,7 +767,7 @@ function showResult(data) {
             '<i class="fas fa-tags text-white text-[9px]"></i>' +
           '</div>' +
           '<h4 class="font-extrabold text-espresso text-sm">' + combo.name + '</h4>' +
-          '<span class="ml-auto bg-amber/10 text-amber-dark text-xs font-black px-2.5 py-1 rounded-xl">' + fmtPrice(combo.effective_price) + '</span>' +
+          '<span class="ml-auto bg-amber/10 text-amber-dark text-xs font-black px-2.5 py-1 rounded-xl">' + fmtPrice(combo.effective_price_kopecks / 100) + '</span>' +
         '</div>' +
         '<div class="bg-white rounded-2xl border border-espresso/5 overflow-hidden shadow-sm" style="border-left: 3px solid #F59E0B;">' +
           '<div class="px-4 py-3 space-y-2">';
@@ -811,7 +811,7 @@ function showResult(data) {
           '<p class="text-xs font-bold text-espresso/40 truncate">' + name + '</p>' +
           '<p class="font-extrabold text-sage-dark text-xs mt-0.5">' + info.coupon_name + '</p>' +
         '</div>' +
-        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(info.price) + '</span>' +
+        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(info.price_kopecks / 100) + '</span>' +
       '</div>';
     }
     html += '</div>';
@@ -831,7 +831,7 @@ function showResult(data) {
       var name = entry[0], info = entry[1];
       var priceDisplay = info.combo_only
         ? '<span class="font-black text-espresso text-[10px] text-sage">только в комбо</span>'
-        : '<span class="font-black text-espresso text-sm">' + fmtPrice(info.price * (info.count || 1)) + '</span>';
+        : '<span class="font-black text-espresso text-sm">' + fmtPrice(info.price_kopecks / 100 * (info.count || 1)) + '</span>';
       html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3">' +
         '<div class="flex-1 min-w-0">' +
           '<p class="font-bold text-espresso text-xs truncate">' + name + (info.count > 1 ? ' x' + info.count : '') + '</p>' +
