@@ -425,10 +425,13 @@ def build_frontend_response(result):
                 price_kop = round(mono_plan[item_name][1] * 100)
             remaining[item_name] = {"count": cnt, "price_kopecks": price_kop}
 
+    saving_tip = best_costs.get("saving_tip", "")
+
     return {
         "menu_total": menu_total_kop,
         "best_total": best_total_kop,
         "savings": round(savings * 100),
+        "saving_tip": saving_tip,
         "plan": {
             "combos": combos_list,
             "mono_coupons": mono_coupons,

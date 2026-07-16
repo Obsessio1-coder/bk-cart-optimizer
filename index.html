@@ -751,6 +751,18 @@ function showResult(data) {
     '</div>';
   }
 
+  if (data.saving_tip) {
+    html += '<div class="bg-blue/10 border-2 border-blue/20 rounded-3xl px-5 py-4 mb-5 flex items-center gap-3 fade-in">' +
+      '<div class="w-10 h-10 bg-blue rounded-2xl flex items-center justify-center flex-shrink-0">' +
+        '<i class="fas fa-lightbulb text-white text-sm"></i>' +
+      '</div>' +
+      '<div class="flex-1">' +
+        '<p class="text-xs font-bold text-blue-dark/60 uppercase tracking-wider mb-0.5">Совет по замене</p>' +
+        '<p class="text-sm font-bold text-espresso leading-snug">' + escHtml(data.saving_tip) + '</p>' +
+      '</div>' +
+    '</div>';
+  }
+
   if (data.not_found && data.not_found.length > 0) {
     html += '<div class="bg-amber/10 border-2 border-amber/20 rounded-3xl px-5 py-4 mb-5">' +
       '<p class="text-xs font-bold text-amber-dark uppercase tracking-wider mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>Не найдено</p>' +
