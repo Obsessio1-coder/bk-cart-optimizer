@@ -394,7 +394,9 @@ function getItemIcon(item) {
   var n = item.name.toLowerCase();
   if (n.indexOf('бургер') >= 0 || n.indexOf('воппер') >= 0 || n.indexOf('чизбургер') >= 0) return 'fa-burger';
   if (n.indexOf('наггет') >= 0 || n.indexOf('стрипс') >= 0 || n.indexOf('криспи') >= 0) return 'fa-drumstick-bite';
-  if (n.indexOf('фри') >= 0 || n.indexOf('картофель') >= 0 || n.indexOf('кольца') >= 0) return 'fa-french-fries';
+  if (n.indexOf('фри') >= 0 || n.indexOf('картофель') >= 0) return 'fa-french-fries';
+  if (n.indexOf('кольца') >= 0) return 'fa-ring';
+  if (n.indexOf('ролл') >= 0 || n.indexOf('врап') >= 0 || n.indexOf('wrap') >= 0) return 'fa-hotdog';
   if (n.indexOf('кола') >= 0 || n.indexOf('кока') >= 0 || n.indexOf('липтон') >= 0 || n.indexOf('чай') >= 0 || n.indexOf('фрустайл') >= 0 || n.indexOf('кофе') >= 0 || n.indexOf('напит') >= 0 || n.indexOf('вода') >= 0 || n.indexOf('сок') >= 0 || n.indexOf('милк') >= 0 || n.indexOf('шейк') >= 0 || n.indexOf('сандэй') >= 0) return 'fa-glass-water';
   if (n.indexOf('соус') >= 0 || n.indexOf('кетчуп') >= 0) return 'fa-droplet';
   if (n.indexOf('десерт') >= 0 || n.indexOf('маффин') >= 0 || n.indexOf('пирож') >= 0 || n.indexOf('рожок') >= 0) return 'fa-cake-candles';
