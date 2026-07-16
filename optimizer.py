@@ -567,7 +567,7 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
     if savings > 0:
         print(f"ЭКОНОМИЯ: {savings:.2f} руб")
 
-    return best_total, savings
+    return best_total, savings, best_state, indiv_total, menu_prices, effective_prices, mono_plan, dish_idx, order
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Burger King price optimizer")

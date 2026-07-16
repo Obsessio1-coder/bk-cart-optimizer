@@ -453,7 +453,10 @@ def optimize():
     except FileNotFoundError:
         return jsonify({"error": "Меню этого ресторана временно недоступно. Выберите другой ресторан или попробуйте позже."}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        tb = traceback.format_exc()
+        print("[OPTIMIZE ERROR]", tb)
+        return jsonify({"error": str(e), "type": type(e).__name__, "trace": tb}), 500
 
     if result is None:
         return jsonify({"error": "Ни одно блюдо не найдено в меню"}), 400
