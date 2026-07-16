@@ -326,15 +326,16 @@ def optimize_api(wanted_list, restaurant_id="1002", mode="auto"):
             for item_name in list(remaining.keys()):
                 if remaining[item_name] > 0:
                     if item_name in mono_plan:
-                        total_rem += mono_plan[item_name][1]
+                        cnt = remaining[item_name]
+                        total_rem += mono_plan[item_name][1] * cnt
                         mono_used.add(item_name)
                         remaining_detail[item_name] = {
-                            "count": 1,
+                            "count": cnt,
                             "price": mono_plan[item_name][1],
                             "coupon": mono_plan[item_name][0],
                             "combo_only": False,
                         }
-                        remaining[item_name] -= 1
+                        remaining[item_name] = 0
                     else:
                         price = effective_prices.get(item_name.lower(), 0)
                         cnt = remaining[item_name]
@@ -389,6 +390,57 @@ def optimize_api(wanted_list, restaurant_id="1002", mode="auto"):
     return result
 
 
+def build_frontend_response(result):
+    best_total, savings, best_state, menu_total, menu_prices, effective_prices, mono_plan, dish_idx, order = result
+    mono_used_items, best_combo, final_remaining, detail_combos, best_costs = best_state
+
+    menu_total_kop = round(menu_total * 100)
+    best_total_kop = round(best_costs["total"] * 100)
+
+    combos_list = []
+    for dc in detail_combos:
+        items_list = []
+        for wanted, selected in dc["items"]:
+            items_list.append({
+                "wanted": None if wanted == "(соус)" else wanted,
+                "selected": selected,
+                "is_sauce": wanted == "(соус)",
+            })
+        combos_list.append({
+            "name": dc["name"],
+            "items": items_list,
+            "effective_price_kopecks": round(dc["effective_price"] * 100),
+        })
+
+    mono_coupons = {}
+    for item_name in mono_used_items:
+        if item_name in mono_plan:
+            cn, cp = mono_plan[item_name]
+            mono_coupons[item_name] = {"coupon_name": cn, "price_kopecks": round(cp * 100)}
+
+    remaining = {}
+    for item_name, cnt in final_remaining.items():
+        if cnt > 0:
+            price_kop = round(menu_prices.get(item_name.lower(), 0) * 100)
+            if item_name in mono_plan:
+                price_kop = round(mono_plan[item_name][1] * 100)
+            remaining[item_name] = {"count": cnt, "price_kopecks": price_kop}
+
+    saving_tip = best_costs.get("saving_tip", "")
+
+    return {
+        "menu_total": menu_total_kop,
+        "best_total": best_total_kop,
+        "savings": round(savings * 100),
+        "saving_tip": saving_tip,
+        "plan": {
+            "combos": combos_list,
+            "mono_coupons": mono_coupons,
+            "remaining": remaining,
+        },
+    }
+
+
 @app.route("/optimize", methods=["POST"])
 def optimize():
     data = request.get_json(force=True)
@@ -399,8 +451,21 @@ def optimize():
     if not items:
         return jsonify({"error": "Поле 'items' обязательно и не должно быть пустым"}), 400
 
-    result = optimize_api(items, restaurant_id=restaurant_id, mode=mode)
-    return jsonify(result)
+    try:
+        from optimizer import optimize as opt_run
+        result = opt_run(items, restaurant_id=restaurant_id, mode=mode)
+    except FileNotFoundError:
+        return jsonify({"error": "Меню этого ресторана временно недоступно. Выберите другой ресторан или попробуйте позже."}), 400
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print("[OPTIMIZE ERROR]", tb)
+        return jsonify({"error": str(e), "type": type(e).__name__, "trace": tb}), 500
+
+    if result is None:
+        return jsonify({"error": "Ни одно блюдо не найдено в меню"}), 400
+
+    return jsonify(build_frontend_response(result))
 
 
 def _load_restaurants():
@@ -446,10 +511,9 @@ def get_restaurants():
 @app.route("/menu", methods=["GET"])
 def get_menu():
     restaurant_id = str(request.args.get("store", "1002"))
-    mode = request.args.get("mode", "auto")
 
     try:
-        menu, _, _ = load_data(rid=restaurant_id, mode=mode)
+        menu, _, _ = load_data(rid=restaurant_id, mode="auto")
         groups_map = _build_group_map(menu)
 
         items = []
@@ -471,7 +535,7 @@ def get_menu():
         return jsonify(items)
 
     except FileNotFoundError:
-        return jsonify({"error": f"Меню для ресторана {restaurant_id} не найдено"}), 404
+        return jsonify({"error": f"Меню для ресторана {restaurant_id} не найдено. Сервер не может загрузить данные временно."}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -1,5 +1,9 @@
-import os, json, requests, re
+import os, sys, json, requests, re
 from datetime import datetime
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CACHE_DIR = os.path.join(BASE_DIR, "bk_all_menus")
+STRUCT_PATH = os.path.join(BASE_DIR, "combo_structures.json")
 
 SESSION_HEADERS = {
     "x-burgerking-platform": "web_mobile",
@@ -12,10 +16,7 @@ SESSION_HEADERS = {
     "sec-ch-ua-platform": '"Windows"',
     "referer": "",
 }
-
-CACHE_DIR = "bk_all_menus"
-OFFLINE_COMBINED = "bk_all_menus_combined.json"
-STRUCT_PATH = "combo_structures.json"
+OFFLINE_COMBINED = os.path.join(BASE_DIR, "bk_all_menus_combined.json")
 
 POTATO_WORDS = {"фри", "картофель"}
 
@@ -59,7 +60,7 @@ def fetch_menu(restaurant_id):
         "https://orderapp.burgerkingrus.ru/gateway/menu-composition/api/v7/menu",
         headers=headers,
         json=payload,
-        timeout=30,
+        timeout=15,
     )
     if not resp.ok:
         print(f"[ERROR] API {resp.status_code}: {resp.text[:300]}")

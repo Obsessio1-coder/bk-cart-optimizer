@@ -1,4 +1,4 @@
-import sys, re, argparse
+import sys, re, math, argparse
 from collections import Counter
 from itertools import combinations
 
@@ -178,63 +178,144 @@ def calculate_selected_combo_price(combo_item, selected_options):
         total_price += opt["price_delta_kopecks"]
     return total_price
 
-# ── главная функция ───────────────────────────────────────────────────
+# ── порционные эквиваленты ───────────────────────────────────────────
 
-def optimize(wanted_list, restaurant_id="1002", mode="auto"):
-    menu, struct, rid = load_data(rid=restaurant_id, mode=mode)
-    dish_idx, menu_by_id, removed_menu, reasons = build_menu_index(menu, rid)
-    combo_prices, combo_skipped = build_combo_prices(menu, rid)
-    menu_id_set = build_menu_id_set(menu)
+PORTION_SIZES = {
+    "small_fries": 1.0,
+    "medium_fries": 1.5,
+    "large_fries": 2.2,
+    "maxx_fries": 3.0,
+    "nuggets_3": 3,
+    "nuggets_6": 6,
+    "nuggets_9": 9,
+    "nuggets_12": 12,
+    "cola_small": 0.4,
+    "cola_medium": 0.5,
+    "cola_large": 0.8,
+}
 
-    # Матчинг заказа
-    matched_names = []
-    for item in wanted_list:
-        name = match_item(item, dish_idx)
-        if name:
-            matched_names.append(name)
-        else:
-            print(f"НЕ НАЙДЕНО: {item}")
-    if not matched_names:
-        return
+def _portion_class(tag):
+    for cls in ("fries", "nuggets", "cola"):
+        if cls in tag:
+            return cls
+    return None
 
-    order = Counter(matched_names)
-    menu_prices = {}
-    for n in order:
-        e = dish_idx.get(n.lower())
-        if e and e["price"] > 0 and not e.get("combo_only"):
-            menu_prices[n.lower()] = e["price"]
+def _tag_portion(name):
+    from bk_api import tag_side
+    tag = tag_side(name)
+    if tag:
+        return tag
+    nl = name.lower()
+    if "кола" in nl or "кока" in nl:
+        if "мал" in nl:
+            return "cola_small"
+        if "стандарт" in nl:
+            return "cola_medium"
+        if "больш" in nl:
+            return "cola_large"
+        if "0,5" in nl or "0.5" in nl:
+            return "cola_medium"
+        if "0,8" in nl or "0.8" in nl:
+            return "cola_large"
+    return None
 
-    indiv_total = sum(menu_prices.get(n.lower(), 0) * c for n, c in order.items())
+def _find_smaller_in_class(item_name, dish_idx):
+    tag = _tag_portion(item_name)
+    if not tag or tag not in PORTION_SIZES:
+        return []
+    cls = _portion_class(tag)
+    if not cls:
+        return []
+    base_size = PORTION_SIZES[tag]
+    smaller = []
+    for name_lower, info in dish_idx.items():
+        if info.get("combo_only"):
+            continue
+        other_tag = _tag_portion(info["name"])
+        if other_tag and _portion_class(other_tag) == cls:
+            other_size = PORTION_SIZES.get(other_tag)
+            if other_size and other_size < base_size:
+                smaller.append((other_tag, other_size, info["name"]))
+    smaller.sort(key=lambda x: x[1], reverse=True)
+    return smaller
 
-    print(f"\nРесторан {rid}")
-    print(f"Отсеяно из меню: {removed_menu} (price_zero={reasons['price_zero']}, restricted={reasons['restricted']})")
-    print(f"Комбо/купоны отброшены по lifecycle: {combo_skipped}")
-    print("Заказ:")
-    for n, c in sorted(order.items()):
-        p = menu_prices.get(n.lower(), 0)
-        co = " [только в комбо]" if dish_idx.get(n.lower(), {}).get("combo_only") else ""
-        print(f"  {n} x{c} @ {p:.2f}{co}")
-    print(f"  Без скидок: {indiv_total:.2f} руб")
+def generate_alternative_carts(order_dict, dish_idx):
+    """Генерирует альтернативные корзины, заменяя порции на бОльшее
+    количество меньших порций того же типа (картофель, наггетсы, кола).
 
-    # ── Моно-купон: прямая цена из general_coupons ──
+    Возвращает список кортежей (Counter(альтернативный_заказ), текст_подсказки).
+    """
+    alternatives = []
+    for item_name, count in list(order_dict.items()):
+        if count <= 0:
+            continue
+        smaller = _find_smaller_in_class(item_name, dish_idx)
+        if not smaller:
+            continue
+        tag = _tag_portion(item_name)
+        base_size = PORTION_SIZES[tag]
+        needed_volume = base_size * count
+        for smaller_tag, smaller_size, smaller_name in smaller:
+            alt_count = math.ceil(needed_volume / smaller_size)
+            alt_cart = Counter(order_dict)
+            alt_cart[item_name] = 0
+            alt_cart[smaller_name] += alt_count
+            alt_cart = +alt_cart
+            extra_pct = (smaller_size * alt_count - needed_volume) / needed_volume * 100 if needed_volume > 0 else 0
+            tip = f"Мы заменили {count}x \"{item_name}\" на {alt_count}x \"{smaller_name}\"."
+            if extra_pct > 0:
+                tip += f" Вы получите на {extra_pct:.0f}% больше!"
+            alternatives.append((alt_cart, tip))
+    return alternatives
+
+def _apply_multi_mono(remaining, multi_mono_coupons, dish_idx):
+    """Применяет мульти-слот купоны к остатку remaining (in-place).
+
+    Возвращает добавленную стоимость в рублях.
+    """
+    added = 0.0
+    for mc in multi_mono_coupons:
+        needed = mc["slots_count"]
+        avail = []
+        for item_name in list(remaining.keys()):
+            cnt = remaining[item_name]
+            if cnt > 0:
+                e = dish_idx.get(item_name.lower())
+                if e and e["id"] in mc["common_ids"]:
+                    avail.extend([item_name] * cnt)
+        if len(avail) >= needed:
+            for i in range(needed):
+                nm = avail[i]
+                remaining[nm] -= 1
+                if remaining[nm] == 0:
+                    del remaining[nm]
+            added += mc["price_kopecks"] / 100
+    return added
+
+# ── внутренний оптимизатор для одной корзины ────────────────────────
+
+def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, menu_prices):
+    """Запускает моно-купон + комбо-поиск для переданной корзины order.
+
+    order:           Counter вида {matched_name: count}
+    menu_prices:     {name_lower: price_in_rub}
+
+    Возвращает (best_total, best_state, effective_prices, mono_plan, indiv_eff).
+    """
     mono_coupons = []
-    coupon_ctx = default_coupon_context(restaurant_id)
+    coupon_ctx = default_coupon_context(rid)
     coupon_skipped = 0
     for entry in menu.get("general_coupons", []):
         ok, reason = validate_coupon_visibility(entry, coupon_ctx)
         if not ok:
             coupon_skipped += 1
-            print(f"  [COUPON SKIP] {entry.get('main_info', {}).get('name', '?')!r}: {reason}")
             continue
         mi = entry["main_info"]
         coupon_id = mi["id"]
         code = entry.get("code", "")
-        # Строгая сверка: coupon id/code должен физически присутствовать в меню ресторана
         if coupon_id not in menu_id_set and code not in menu_id_set:
-            print(f"  [COUPON SKIP] {mi.get('name', '?')!r}: id={coupon_id} code={code!r} absent from restaurant menu")
             continue
         cname = mi["name"]
-        fallback_price = mi["price"] / 100
         code = entry.get("code", "")
         struct_entry = struct["coupons"].get(code) or struct["combos"].get(str(mi["id"]))
         if not struct_entry:
@@ -246,8 +327,6 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
         for d in dishes:
             did = d.get("dish_id")
             if did and did in menu_by_id:
-                # Цена купона — своя для каждой позиции (скрытая таблица наценок БК),
-                # а не плоская база mi["price"]. Для «Всё по 99,99» Воппер = 249.98, Кола = 99.99.
                 dish_price = d.get("price", mi["price"]) / 100
                 mono_coupons.append((did, cname, dish_price))
 
@@ -257,7 +336,37 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
         if old is None or cprice < old[1]:
             discount_map[did] = (cname, cprice)
 
-    # Апгрейд: если купон даёт больше того же блюда за меньшие деньги
+    # ── Мульти-слот купоны (≥2 одинаковых слота, напр. «2 соуса на выбор») ──
+    multi_mono_coupons = []
+    for entry in menu.get("general_coupons", []):
+        ok, reason = validate_coupon_visibility(entry, coupon_ctx)
+        if not ok:
+            continue
+        mi = entry["main_info"]
+        coupon_id = mi["id"]
+        code = entry.get("code", "")
+        if coupon_id not in menu_id_set and code not in menu_id_set:
+            continue
+        struct_entry = struct["coupons"].get(code) or struct["combos"].get(str(mi["id"]))
+        if not struct_entry:
+            continue
+        slots = struct_entry.get("slots", [])
+        if len(slots) < 2:
+            continue
+        dish_id_sets = [set(d.get("dish_id") for d in s.get("dishes", []) if d.get("dish_id")) for s in slots]
+        common = dish_id_sets[0]
+        for s_set in dish_id_sets[1:]:
+            common = common & s_set
+        if not common:
+            continue
+        multi_mono_coupons.append({
+            "name": mi["name"],
+            "price_kopecks": mi["price"],
+            "slots_count": len(slots),
+            "common_ids": common,
+        })
+    multi_mono_coupons.sort(key=lambda x: (-x["slots_count"], x["price_kopecks"]))
+
     for item_name in list(order.keys()):
         e = dish_idx.get(item_name.lower())
         if not e:
@@ -280,39 +389,34 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
                     and cprice < e["price"]):
                 if e["id"] not in discount_map or cprice < discount_map[e["id"]][1]:
                     discount_map[e["id"]] = (cname, cprice)
-                    print(f"  [UPGRADE] {item_name} -> {coupon_name} @ {cprice:.2f} (купон)")
 
-    print(f"  Моно-купонов привязано: {sum(1 for _ in mono_coupons)}, без привязки: 0 (отсеяно фантомных: {coupon_skipped})")
-    print(f"  Комбо-купонов (2+ слота): {len(menu['combos'])}")
+    effective_prices = dict(menu_prices)
+    mono_plan = {}
+    for item_name in order:
+        e = dish_idx.get(item_name.lower())
+        if e and e["id"] in discount_map:
+            cname, cprice = discount_map[e["id"]]
+            if cprice < effective_prices.get(item_name.lower(), 999):
+                effective_prices[item_name.lower()] = cprice
+                mono_plan[item_name] = (cname, cprice)
 
-    # ── Подготовка ComboCoupon: нормализация через BKMenuItem ──
+    indiv_eff = sum(effective_prices.get(n.lower(), 0) * c for n, c in order.items())
+
     wanted_names = set(order.keys())
     all_combos = []
 
     for entry in menu["combos"]:
         mi = entry["main_info"]
         cid = mi["id"]
-
-        # Строгая сверка: combo_id должен физически присутствовать в меню ресторана
         if cid not in menu_id_set:
-            print(f"  [COMBO SKIP] {mi.get('name', '?')!r}: id={cid} absent from restaurant menu")
             continue
-
         struct_entry = struct["combos"].get(str(cid))
         if not struct_entry:
             continue
-
-        # Нормализация через bk_api.normalize_combo
         normalized = normalize_combo(entry, struct_entry, rid)
-
-        # Дополнительная проверка lifecycle после нормализации (даты, restricted)
         lc = normalized.get("lifecycle", {})
         if not (lc.get("is_active") and lc.get("is_available") and lc.get("is_visible")):
-            reason = lc.get("reject_reason", "lifecycle_failed")
-            print(f"  [COMBO SKIP] {mi.get('name', '?')!r}: {reason}")
             continue
-
-        # Фильтрация: убираем группы без доступных опций
         clean_groups = []
         skip = False
         for group in normalized["required_modifier_groups"]:
@@ -329,20 +433,12 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
                     filtered_options.append(opt)
                 elif not did_int:
                     filtered_options.append(opt)
-
             if not filtered_options:
                 skip = True
                 break
-
-            clean_groups.append({
-                **group,
-                "options": filtered_options,
-            })
-
+            clean_groups.append({**group, "options": filtered_options})
         if skip:
             continue
-
-        # Определяем side_slot_index и sauce_slot_indices
         side_slot_index = None
         sauce_slot_indices = set()
         for gi, group in enumerate(clean_groups):
@@ -355,9 +451,7 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
             )
             if has_potato and side_slot_index is None:
                 side_slot_index = gi
-
         base_price = normalized["pricing"]["base_price_kopecks"]
-
         all_combos.append({
             "id": cid,
             "name": normalized["name"],
@@ -369,20 +463,6 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
             "lifecycle": normalized["lifecycle"],
         })
 
-    # ── Шаг 1: MonoCoupon как price floor ──
-    effective_prices = dict(menu_prices)
-    mono_plan = {}
-    for item_name in order:
-        e = dish_idx.get(item_name.lower())
-        if e and e["id"] in discount_map:
-            cname, cprice = discount_map[e["id"]]
-            if cprice < effective_prices.get(item_name.lower(), 999):
-                effective_prices[item_name.lower()] = cprice
-                mono_plan[item_name] = (cname, cprice)
-
-    indiv_eff = sum(effective_prices.get(n.lower(), 0) * c for n, c in order.items())
-
-    # ── Шаг 2: перебор ComboCoupon ──
     relevant = []
     for combo in all_combos:
         group_maps = []
@@ -406,23 +486,31 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
         if ok:
             relevant.append((combo, group_maps))
 
-    print(f"  Релевантных комбо: {len(relevant)}/{len(all_combos)}")
-
     best_total = indiv_eff
     best_state = None
 
-    # Вариант A: только MonoCoupon
     remaining_mono = order.copy()
     mono_items_used = set()
     for item_name in list(remaining_mono.keys()):
         if item_name in mono_plan:
             remaining_mono[item_name] = 0
             mono_items_used.add(item_name)
-    best_state = (mono_items_used, [], remaining_mono, [], {
-        "total": indiv_eff, "with_sauce": indiv_eff, "without_sauce": indiv_eff,
+    remaining_multi = Counter({k: v for k, v in remaining_mono.items() if v > 0})
+    multi_added = _apply_multi_mono(remaining_multi, multi_mono_coupons, dish_idx)
+    initial_total = sum(mono_plan[i][1] for i in mono_items_used) if mono_items_used else 0.0
+    initial_total += multi_added
+    for item_name, cnt in remaining_multi.items():
+        if cnt > 0:
+            initial_total += effective_prices.get(item_name.lower(), 0) * cnt
+    best_state = (mono_items_used, [], remaining_multi, [], {
+        "total": initial_total,
+        "with_sauce": initial_total,
+        "without_sauce": initial_total,
+        "saving_tip": "",
     })
+    if initial_total < best_total:
+        best_total = initial_total
 
-    # Вариант B: ComboCoupon ± MonoCoupon
     for r in range(min(len(relevant), 3)):
         for subset in combinations(relevant, r + 1):
             remaining = Counter(order)
@@ -494,15 +582,20 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
             if not possible:
                 continue
 
-            # MonoCoupon на остаток
             total_rem = 0.0
             mono_used = set()
+
+            # Сначала мульти-слот купоны (напр. 2 соуса за 99,99)
+            total_rem += _apply_multi_mono(remaining, multi_mono_coupons, dish_idx)
+
+            # Потом однослотовые моно-купон и остаток
             for item_name in list(remaining.keys()):
                 if remaining[item_name] > 0:
                     if item_name in mono_plan:
-                        total_rem += mono_plan[item_name][1]
+                        cnt = remaining[item_name]
+                        total_rem += mono_plan[item_name][1] * cnt
                         mono_used.add(item_name)
-                        remaining[item_name] -= 1
+                        remaining[item_name] = 0
                     else:
                         total_rem += effective_prices.get(item_name.lower(), 0) * remaining[item_name]
                         remaining[item_name] = 0
@@ -516,7 +609,137 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
                         "combo_total": total,
                         "with_sauce": total_with_sauce + total_rem,
                         "without_sauce": total_without_sauce + total_rem,
+                        "saving_tip": "",
                     })
+
+    return best_total, best_state, effective_prices, mono_plan, indiv_eff
+
+# ── главная функция ───────────────────────────────────────────────────
+
+def optimize(wanted_list, restaurant_id="1002", mode="auto"):
+    menu, struct, rid = load_data(rid=restaurant_id, mode=mode)
+    dish_idx, menu_by_id, removed_menu, reasons = build_menu_index(menu, rid)
+    combo_prices, combo_skipped = build_combo_prices(menu, rid)
+    menu_id_set = build_menu_id_set(menu)
+
+    # Матчинг заказа
+    matched_names = []
+    for item in wanted_list:
+        name = match_item(item, dish_idx)
+        if name:
+            matched_names.append(name)
+        else:
+            print(f"НЕ НАЙДЕНО: {item}")
+    if not matched_names:
+        return
+
+    order = Counter(matched_names)
+    menu_prices = {}
+    for n in order:
+        e = dish_idx.get(n.lower())
+        if e and e["price"] > 0 and not e.get("combo_only"):
+            menu_prices[n.lower()] = e["price"]
+
+    indiv_total = sum(menu_prices.get(n.lower(), 0) * c for n, c in order.items())
+
+    print(f"\nРесторан {rid}")
+    print(f"Отсеяно из меню: {removed_menu} (price_zero={reasons['price_zero']}, restricted={reasons['restricted']})")
+    print(f"Комбо/купоны отброшены по lifecycle: {combo_skipped}")
+    print("Заказ:")
+    for n, c in sorted(order.items()):
+        p = menu_prices.get(n.lower(), 0)
+        co = " [только в комбо]" if dish_idx.get(n.lower(), {}).get("combo_only") else ""
+        print(f"  {n} x{c} @ {p:.2f}{co}")
+    print(f"  Без скидок: {indiv_total:.2f} руб")
+
+    # ── Генерация альтернативных корзин ──
+    alt_carts = generate_alternative_carts(order, dish_idx)
+    if alt_carts:
+        print(f"\n  Alts ({len(alt_carts)}):")
+        for alt_order, tip in alt_carts:
+            alt_summary = ", ".join(f"{k} x{v}" for k, v in sorted(alt_order.items()) if v > 0)
+            print(f"    {tip}  [{alt_summary}]")
+
+    # ── Оптимизация для всех корзин ──
+    best_total, best_state, best_eff, best_mono, _ = _optimize_cart(
+        order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, menu_prices,
+    )
+    best_alt_tip = ""
+    used_alternative = False
+
+    for alt_order, alt_tip in alt_carts:
+        alt_menu_prices = {}
+        for n in alt_order:
+            e = dish_idx.get(n.lower())
+            if e and e["price"] > 0 and not e.get("combo_only"):
+                alt_menu_prices[n.lower()] = e["price"]
+        alt_total, alt_state, alt_eff, alt_mono, _ = _optimize_cart(
+            alt_order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, alt_menu_prices,
+        )
+        if alt_total < best_total:
+            best_total = alt_total
+            best_state = alt_state
+            best_eff = alt_eff
+            best_mono = alt_mono
+            best_alt_tip = alt_tip
+            used_alternative = True
+
+    savings = indiv_total - best_total
+
+    # ── вывод ──
+    mono_used_items, best_combo, final_remaining, detail_combos, best_costs = best_state
+
+    best_costs["saving_tip"] = best_alt_tip
+
+    print()
+    print("=" * 70)
+    print("ОПТИМАЛЬНЫЙ ПЛАН")
+    print("=" * 70)
+
+    if best_alt_tip:
+        print(f"\n💡 {best_alt_tip}")
+
+    if mono_used_items:
+        mono_cost = sum(best_mono[i][1] for i in mono_used_items)
+        print(f"\nМоно-купон ({mono_cost:.2f} руб):")
+        for item in mono_used_items:
+            cn, cp = best_mono[item]
+            print(f"  + {cn} → {item} @ {cp:.2f}")
+
+    if best_combo:
+        combo_total = best_costs["combo_total"]
+        print(f"\nКомбо ({combo_total:.2f} руб):")
+        for da in detail_combos:
+            print(f"  + {da['name']} @ {da['effective_price']:.2f}:")
+            for wanted, actual in da["items"]:
+                if wanted != actual:
+                    print(f"      {wanted} -> {actual}")
+                else:
+                    print(f"      {actual}")
+
+    if final_remaining:
+        leftover = {k: v for k, v in final_remaining.items() if v > 0}
+        if leftover:
+            extra_cost = sum(best_eff.get(i.lower(), 0) * c for i, c in leftover.items())
+            print(f"\nОтдельно ({extra_cost:.2f} руб):")
+            for item, cnt in leftover.items():
+                p = best_eff.get(item.lower(), 0)
+                if cnt > 0:
+                    print(f"  + {item} x{cnt} = {p*cnt:.2f}")
+
+    w_sauce = best_costs.get("with_sauce", best_total)
+    wo_sauce = best_costs.get("without_sauce", best_total)
+    if w_sauce != wo_sauce:
+        print(f"\n  Соусный слот: без соуса -> {wo_sauce:.2f} руб / с соусом -> {w_sauce:.2f} руб")
+
+    print(f"\nИТОГО: {best_total:.2f} руб")
+    if w_sauce != wo_sauce and w_sauce == best_total:
+        print(f"  (без соуса: {wo_sauce:.2f} руб)")
+    print(f"Без акций: {indiv_total:.2f} руб")
+    if savings > 0:
+        print(f"ЭКОНОМИЯ: {savings:.2f} руб")
+
+    return best_total, savings, best_state, indiv_total, menu_prices, best_eff, best_mono, dish_idx, order
 
     # ── вывод ──
     mono_used_items, best_combo, final_remaining, detail_combos, best_costs = best_state
@@ -567,7 +790,7 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
     if savings > 0:
         print(f"ЭКОНОМИЯ: {savings:.2f} руб")
 
-    return best_total, savings
+    return best_total, savings, best_state, indiv_total, menu_prices, effective_prices, mono_plan, dish_idx, order
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Burger King price optimizer")

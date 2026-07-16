@@ -243,27 +243,45 @@ function dec(val) { return decodeURIComponent(val); }
 
 async function init() {
   loadState();
+  if (allRestaurants.length === 0) {
+    try {
+      var resp = await fetch(API_BASE + '/restaurants');
+      if (resp.ok) allRestaurants = await resp.json();
+    } catch (e) { /* ignore */ }
+  }
+  lookupRestaurantName();
   await fetchMenu();
   renderMenu();
   updateCart();
+}
+
+function lookupRestaurantName() {
+  if (restaurantName) return;
+  var found = allRestaurants.find(function(r) { return String(r.id) === restaurantId; });
+  if (found) {
+    restaurantName = found.name;
+    document.getElementById('storeLabel').textContent = restaurantName;
+  }
 }
 
 async function fetchMenu() {
   try {
     const resp = await fetch(API_BASE + '/menu?store=' + restaurantId + '&mode=auto');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    menuItems = await resp.json();
+    var data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    menuItems = data;
     menuByName = {};
     for (const item of menuItems) {
       menuByName[item.name.toLowerCase()] = item;
     }
     document.getElementById('storeLabel').textContent = restaurantName || restaurantId;
     document.getElementById('emptyState').classList.add('hidden');
+    return true;
   } catch (e) {
     console.warn('fetchMenu failed:', e);
-    menuItems = [];
-    menuByName = {};
-    document.getElementById('emptyState').classList.remove('hidden');
+    showToast('Меню не загружено: ' + e.message, 'warn');
+    return false;
   }
 }
 
@@ -368,12 +386,11 @@ function getItemIcon(item) {
 }
 
 function btnScrollToCat(el) {
-  var cat = dec(el.dataset.cat);
-  scrollToCat(cat);
+  scrollToCat(el.dataset.cat);
 }
 
-function scrollToCat(id) {
-  var el = document.getElementById('cat-' + id);
+function scrollToCat(encoded) {
+  var el = document.getElementById('cat-' + encoded);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -642,6 +659,8 @@ function btnSelectRestaurant(el) {
 
 async function selectRestaurant(id, name) {
   if (id == restaurantId) { closeStoreModal(); return; }
+  var oldId = restaurantId;
+  var oldName = restaurantName;
   restaurantId = String(id);
   restaurantName = name;
   closeStoreModal();
@@ -649,7 +668,15 @@ async function selectRestaurant(id, name) {
   showToast('Выбран ресторан: ' + name, 'ok');
   cart = {};
   saveState();
-  await fetchMenu();
+  var ok = await fetchMenu();
+  if (!ok) {
+    restaurantId = oldId;
+    restaurantName = oldName;
+    saveState();
+    document.getElementById('storeLabel').textContent = oldName || oldId;
+    showToast('Меню не загружено, ресторан не изменён', 'warn');
+    return;
+  }
   renderMenu();
   updateCart();
 }
@@ -701,14 +728,14 @@ function showResult(data) {
   html += '<div class="flex items-center gap-4 mb-5 bg-white rounded-3xl p-5 shadow-sm border border-espresso/5">' +
     '<div class="flex-1">' +
       '<p class="text-xs font-bold text-espresso/30 uppercase tracking-wider mb-1">Обычная цена</p>' +
-      '<p class="font-black text-espresso/30 text-xl line-through decoration-2">' + fmtPrice(data.menu_total) + '</p>' +
+      '<p class="font-black text-espresso/30 text-xl line-through decoration-2">' + fmtPrice(data.menu_total / 100) + '</p>' +
     '</div>' +
     '<div class="w-10 h-10 bg-cream rounded-2xl flex items-center justify-center">' +
       '<i class="fas fa-arrow-right text-espresso/20"></i>' +
     '</div>' +
     '<div class="flex-1 text-right">' +
       '<p class="text-xs font-bold text-sage uppercase tracking-wider mb-1">С выгодой</p>' +
-      '<p class="font-black text-sage text-2xl">' + fmtPrice(data.best_total) + '</p>' +
+      '<p class="font-black text-sage text-2xl">' + fmtPrice(data.best_total / 100) + '</p>' +
     '</div>' +
   '</div>';
 
@@ -719,7 +746,19 @@ function showResult(data) {
       '</div>' +
       '<div>' +
         '<p class="text-xs font-bold text-sage-dark/60 uppercase tracking-wider">Вы экономите</p>' +
-        '<p class="font-black text-sage-dark text-xl">' + fmtPrice(data.savings) + '</p>' +
+        '<p class="font-black text-sage-dark text-xl">' + fmtPrice(data.savings / 100) + '</p>' +
+      '</div>' +
+    '</div>';
+  }
+
+  if (data.saving_tip) {
+    html += '<div class="bg-blue/10 border-2 border-blue/20 rounded-3xl px-5 py-4 mb-5 flex items-center gap-3 fade-in">' +
+      '<div class="w-10 h-10 bg-blue rounded-2xl flex items-center justify-center flex-shrink-0">' +
+        '<i class="fas fa-lightbulb text-white text-sm"></i>' +
+      '</div>' +
+      '<div class="flex-1">' +
+        '<p class="text-xs font-bold text-blue-dark/60 uppercase tracking-wider mb-0.5">Совет по замене</p>' +
+        '<p class="text-sm font-bold text-espresso leading-snug">' + escHtml(data.saving_tip) + '</p>' +
       '</div>' +
     '</div>';
   }
@@ -740,7 +779,7 @@ function showResult(data) {
             '<i class="fas fa-tags text-white text-[9px]"></i>' +
           '</div>' +
           '<h4 class="font-extrabold text-espresso text-sm">' + combo.name + '</h4>' +
-          '<span class="ml-auto bg-amber/10 text-amber-dark text-xs font-black px-2.5 py-1 rounded-xl">' + fmtPrice(combo.effective_price) + '</span>' +
+          '<span class="ml-auto bg-amber/10 text-amber-dark text-xs font-black px-2.5 py-1 rounded-xl">' + fmtPrice(combo.effective_price_kopecks / 100) + '</span>' +
         '</div>' +
         '<div class="bg-white rounded-2xl border border-espresso/5 overflow-hidden shadow-sm" style="border-left: 3px solid #F59E0B;">' +
           '<div class="px-4 py-3 space-y-2">';
@@ -784,7 +823,7 @@ function showResult(data) {
           '<p class="text-xs font-bold text-espresso/40 truncate">' + name + '</p>' +
           '<p class="font-extrabold text-sage-dark text-xs mt-0.5">' + info.coupon_name + '</p>' +
         '</div>' +
-        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(info.price) + '</span>' +
+        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(info.price_kopecks / 100) + '</span>' +
       '</div>';
     }
     html += '</div>';
@@ -804,7 +843,7 @@ function showResult(data) {
       var name = entry[0], info = entry[1];
       var priceDisplay = info.combo_only
         ? '<span class="font-black text-espresso text-[10px] text-sage">только в комбо</span>'
-        : '<span class="font-black text-espresso text-sm">' + safeFmtPrice(info.price * (info.count || 1)) + '</span>';
+        : '<span class="font-black text-espresso text-sm">' + fmtPrice(info.price_kopecks / 100 * (info.count || 1)) + '</span>';
       html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3">' +
         '<div class="flex-1 min-w-0">' +
           '<p class="font-bold text-espresso text-xs truncate">' + name + (info.count > 1 ? ' x' + info.count : '') + '</p>' +
