@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Кинг Сейвер</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        cream: '#F4EFE6',
+        espresso: '#4A1E12',
+        amber: '#F59E0B',
+        'amber-dark': '#D97706',
+        sage: '#10B981',
+        'sage-dark': '#059669',
+      },
+      fontFamily: {
+        nunito: ['Nunito', 'sans-serif'],
+      },
+    }
+  }
+}
+</script>
+<style>
+  * { font-family: 'Nunito', sans-serif; -webkit-tap-highlight-color: transparent; }
+  body { background: #F4EFE6; }
+  .pulse-btn { animation: pulse-glow 2s ease-in-out infinite; }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); }
+    50% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
+  }
+  @keyframes slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes spin-soft {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+  .fade-in { animation: fade-in 0.3s ease-out; }
+  .spin-soft { animation: spin-soft 1s linear infinite; }
+  .tab-indicator { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+  .bottom-sheet {
+    max-height: 85vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .bottom-sheet::-webkit-scrollbar { width: 4px; }
+  .bottom-sheet::-webkit-scrollbar-track { background: transparent; }
+  .bottom-sheet::-webkit-scrollbar-thumb { background: rgba(74, 30, 18, 0.2); border-radius: 99px; }
+  .search-dropdown {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 25;
+    background: white; border-radius: 16px; border: 1px solid rgba(74,30,18,0.05);
+    box-shadow: 0 12px 32px rgba(74,30,18,0.12);
+    max-height: 260px; overflow-y: auto; overscroll-behavior: contain;
+    margin-top: 6px;
+  }
+  .search-dropdown::-webkit-scrollbar { width: 4px; }
+  .search-dropdown::-webkit-scrollbar-thumb { background: rgba(74,30,18,0.12); border-radius: 99px; }
+  .cat-section { scroll-margin-top: 70px; }
+  @keyframes toast-in {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes toast-out {
+    from { transform: translateY(0); opacity: 1; }
+    to { transform: translateY(20px); opacity: 0; }
+  }
+  .toast-in { animation: toast-in 0.25s ease-out; }
+  .toast-out { animation: toast-out 0.25s ease-in forwards; }
+</style>
+</head>
+<body class="min-h-screen pb-8">
+
+<header class="sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b-2 border-espresso/5">
+  <div class="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="w-10 h-10 bg-espresso rounded-2xl flex items-center justify-center shadow-lg">
+        <i class="fas fa-crown text-amber text-lg"></i>
+      </div>
+      <div>
+        <h1 class="font-nunito font-black text-espresso text-xl leading-tight tracking-tight">Кинг Сейвер</h1>
+        <p class="text-[10px] text-espresso/40 font-bold tracking-widest uppercase">Оптимизатор корзины</p>
+      </div>
+    </div>
+    <button onclick="openStoreModal()" class="flex items-center gap-1.5 bg-espresso/5 hover:bg-espresso/10 rounded-2xl px-3 py-2 transition-colors max-w-[180px]">
+      <i class="fas fa-location-dot text-espresso/50 text-xs flex-shrink-0"></i>
+      <span class="text-xs font-bold text-espresso/60 truncate" id="storeLabel">Загрузка...</span>
+    </button>
+  </div>
+</header>
+
+<main class="max-w-lg mx-auto px-4 pt-4">
+
+  <div class="flex bg-espresso/5 rounded-2xl p-1 mb-5 relative">
+    <div id="tabIndicator" class="absolute top-1 left-1 w-[calc(50%-4px)] h-[calc(100%-8px)] bg-white rounded-xl shadow-sm tab-indicator"></div>
+    <button onclick="switchTab('popular')" id="tabBtnPopular" class="relative z-10 flex-1 py-2.5 text-sm font-extrabold text-espresso transition-colors rounded-xl">
+      <i class="fas fa-fire mr-1 text-amber"></i>Меню
+    </button>
+    <button onclick="switchTab('search')" id="tabBtnSearch" class="relative z-10 flex-1 py-2.5 text-sm font-extrabold text-espresso/40 transition-colors rounded-xl">
+      <i class="fas fa-magnifying-glass mr-1"></i>Поиск
+    </button>
+  </div>
+
+  <div id="tabPopular">
+    <div id="categoryNav" class="flex gap-1.5 overflow-x-auto pb-3 mb-1 scrollbar-none"></div>
+    <div id="categoryContent"></div>
+  </div>
+
+  <div id="tabSearch" class="hidden">
+    <div class="bg-white rounded-3xl p-4 shadow-sm border border-espresso/5">
+      <label class="text-xs font-extrabold text-espresso/40 uppercase tracking-wider mb-2 block">Название блюда</label>
+      <div class="flex gap-2">
+        <div class="flex-1 relative">
+          <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-espresso/20 z-10"></i>
+          <input id="searchInput" type="text" placeholder="Например: Шримп Ролл"
+            class="w-full bg-cream rounded-2xl pl-10 pr-4 py-3 text-sm font-bold text-espresso placeholder:text-espresso/25 outline-none focus:ring-2 focus:ring-amber/40 transition-all"
+            oninput="onSearchInput(this.value)" onkeydown="onSearchKeydown(event)" autocomplete="off">
+          <div id="searchDropdown" class="search-dropdown hidden"></div>
+        </div>
+        <button onclick="addSearchItem()" class="bg-amber hover:bg-amber-dark text-white font-extrabold text-sm px-5 py-3 rounded-2xl transition-all active:scale-95 shadow-md shadow-amber/30">
+          <i class="fas fa-plus"></i>
+        </button>
+      </div>
+      <div id="searchSuggestions" class="mt-2 flex flex-wrap gap-1.5"></div>
+    </div>
+  </div>
+
+  <div id="cartSection" class="hidden mt-6">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="w-7 h-7 bg-espresso rounded-xl flex items-center justify-center">
+        <i class="fas fa-shopping-cart text-cream text-xs"></i>
+      </div>
+      <h2 class="font-nunito font-black text-espresso text-base">Корзина</h2>
+      <span id="cartCount" class="ml-auto bg-amber text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span>
+    </div>
+    <div id="cartItems" class="space-y-2"></div>
+    <div class="mt-4 flex items-center justify-between bg-espresso/5 rounded-2xl px-4 py-3">
+      <span class="text-sm font-bold text-espresso/50">Без акций:</span>
+      <span id="cartTotal" class="font-black text-espresso text-lg">0 Р</span>
+    </div>
+    <button id="calcBtn" onclick="runOptimization()" class="pulse-btn mt-4 w-full bg-amber hover:bg-amber-dark text-white font-black text-base py-4 rounded-3xl shadow-lg shadow-amber/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+      <i class="fas fa-wand-magic-sparkles"></i>
+      Рассчитать выгоду
+    </button>
+  </div>
+
+  <div id="emptyState" class="mt-12 text-center py-8 hidden">
+    <div class="w-20 h-20 bg-espresso/5 rounded-3xl flex items-center justify-center mx-auto mb-4">
+      <i class="fas fa-burger text-3xl text-espresso/15"></i>
+    </div>
+    <p class="font-extrabold text-espresso/25 text-sm">Добавьте блюда в корзину</p>
+  </div>
+
+</main>
+
+<div id="modalBackdrop" class="fixed inset-0 bg-espresso/40 backdrop-blur-sm z-50 hidden" onclick="closeStoreModal()"></div>
+<div id="storeModal" class="fixed inset-x-0 bottom-0 z-50 bg-cream rounded-t-3xl p-6 pb-10 transform translate-y-full transition-transform duration-300 ease-out max-w-lg mx-auto" onclick="event.stopPropagation()">
+  <div class="w-10 h-1 bg-espresso/15 rounded-full mx-auto mb-5"></div>
+  <h3 class="font-nunito font-black text-espresso text-lg mb-1">Выберите ресторан</h3>
+  <p class="text-xs font-bold text-espresso/30 mb-4">Начните вводить адрес или город</p>
+  <div class="relative mb-4">
+    <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-espresso/30 z-10"></i>
+    <input id="storeSearchInput" type="text" placeholder="Поиск по адресу или городу..."
+      class="w-full bg-white rounded-2xl pl-11 pr-4 py-3.5 text-sm font-bold text-espresso outline-none focus:ring-2 focus:ring-amber/40 border border-espresso/5"
+      oninput="onStoreSearch(this.value)" autocomplete="off">
+  </div>
+  <div id="restaurantList" class="max-h-64 overflow-y-auto space-y-1 mb-5"></div>
+  <button onclick="closeStoreModal()" class="w-full bg-espresso/5 text-espresso/40 font-extrabold text-sm py-3.5 rounded-2xl active:scale-[0.98] transition-all">
+    Отмена
+  </button>
+</div>
+
+<div id="resultSheet" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-espresso/50 backdrop-blur-sm" onclick="closeResult()"></div>
+  <div class="absolute inset-x-0 bottom-0 bg-cream rounded-t-3xl bottom-sheet slide-up max-w-lg mx-auto">
+    <div class="sticky top-0 bg-cream pt-5 pb-3 px-5 z-10">
+      <div class="w-10 h-1 bg-espresso/15 rounded-full mx-auto mb-4"></div>
+      <div class="flex items-center justify-between">
+        <h3 class="font-nunito font-black text-espresso text-lg">Ваш план экономии!</h3>
+        <button onclick="closeResult()" class="w-8 h-8 bg-espresso/5 rounded-full flex items-center justify-center">
+          <i class="fas fa-xmark text-espresso/40 text-sm"></i>
+        </button>
+      </div>
+    </div>
+    <div id="resultContent" class="px-5 pb-8"></div>
+  </div>
+</div>
+
+<div id="toastContainer" class="fixed top-20 left-1/2 -translate-x-1/2 z-[70] flex flex-col items-center gap-2 pointer-events-none max-w-lg w-full px-4"></div>
+
+<div id="loaderOverlay" class="fixed inset-0 z-[60] bg-espresso/60 backdrop-blur-md hidden flex items-center justify-center">
+  <div class="text-center">
+    <div class="w-16 h-16 border-4 border-cream/20 border-t-amber rounded-full spin-soft mx-auto mb-4"></div>
+    <p class="text-cream font-extrabold text-sm">Ищем лазейки в меню...</p>
+    <p class="text-cream/40 text-xs mt-1">Анализируем 49 комбо и купоны</p>
+  </div>
+</div>
+
+<script>
+const API_BASE = '';
+
+let cart = {};
+let restaurantId = '1002';
+let restaurantName = '';
+let menuItems = [];
+let menuByName = {};
+let searchHighlightIdx = -1;
+let allRestaurants = [];
+let storeSearchTimer = null;
+
+// Safe helpers: encodeURIComponent for data attrs → no HTML/JS escaping issues
+function enc(val) { return encodeURIComponent(val); }
+function dec(val) { return decodeURIComponent(val); }
+
+async function init() {
+  loadState();
+  await fetchMenu();
+  renderMenu();
+  updateCart();
+}
+
+async function fetchMenu() {
+  try {
+    const resp = await fetch(API_BASE + '/menu?store=' + restaurantId + '&mode=auto');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    menuItems = await resp.json();
+    menuByName = {};
+    for (const item of menuItems) {
+      menuByName[item.name.toLowerCase()] = item;
+    }
+    document.getElementById('storeLabel').textContent = restaurantName || restaurantId;
+    document.getElementById('emptyState').classList.add('hidden');
+  } catch (e) {
+    console.warn('fetchMenu failed:', e);
+    menuItems = [];
+    menuByName = {};
+    document.getElementById('emptyState').classList.remove('hidden');
+  }
+}
+
+function fmtPriceKop(kopecks) {
+  return (kopecks / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' \u20BD';
+}
+
+function fmtPrice(val) {
+  return Number(val).toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' \u20BD';
+}
+
+function buildCategoryMap() {
+  const map = {};
+  for (const item of menuItems) {
+    const cats = item.groups && item.groups.length > 0 ? item.groups : ['Остальное'];
+    for (const cat of cats) {
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(item);
+    }
+  }
+  const order = ['Бургеры', 'Вопперы', 'Наггетсы и стрипсы', 'Картофель и гарниры', 'Напитки', 'Десерты', 'Соусы', 'Остальное'];
+  const sorted = {};
+  for (const key of order) {
+    if (map[key]) { sorted[key] = map[key]; delete map[key]; }
+  }
+  for (const key of Object.keys(map).sort()) {
+    sorted[key] = map[key];
+  }
+  return sorted;
+}
+
+function renderMenu() {
+  const cats = buildCategoryMap();
+  const catKeys = Object.keys(cats);
+
+  const nav = document.getElementById('categoryNav');
+  nav.innerHTML = catKeys.map(function(c) {
+    var safe = c.replace(/"/g, '&quot;');
+    return '<button onclick="scrollToCat(\'' + safe + '\')" class="flex-shrink-0 bg-white hover:bg-amber/10 text-espresso/50 hover:text-amber-dark text-[10px] font-extrabold px-3.5 py-1.5 rounded-full border border-espresso/5 transition-all active:scale-95">' + c + '</button>';
+  }).join('');
+
+  const content = document.getElementById('categoryContent');
+  content.innerHTML = catKeys.map(function(cat) {
+    var safe = cat.replace(/"/g, '&quot;');
+    var itemsHtml = cats[cat].map(function(item) { return renderItemCard(item); }).join('');
+    return '<div id="cat-' + safe + '" class="cat-section mb-5">' +
+      '<div class="flex items-center gap-2 mb-3">' +
+        '<h3 class="font-nunito font-black text-espresso text-sm">' + cat + '</h3>' +
+        '<span class="text-[9px] font-bold text-espresso/20 bg-espresso/5 px-2 py-0.5 rounded-full">' + cats[cat].length + '</span>' +
+      '</div>' +
+      '<div class="grid grid-cols-2 gap-3">' + itemsHtml + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderItemCard(item) {
+  var count = cart[item.name] || 0;
+  var e = enc(item.name);
+  return '<div class="bg-white rounded-3xl p-3.5 shadow-sm border border-espresso/5 transition-all hover:shadow-md active:scale-[0.98]">' +
+    '<div class="flex items-start gap-2.5 mb-3">' +
+      '<div class="w-9 h-9 bg-cream rounded-2xl flex items-center justify-center flex-shrink-0">' +
+        '<i class="fas ' + getItemIcon(item) + ' text-espresso/30 text-sm"></i>' +
+      '</div>' +
+      '<div class="min-w-0">' +
+        '<p class="font-extrabold text-espresso text-xs leading-tight">' + escHtml(item.name) + '</p>' +
+        '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + fmtPriceKop(item.price_kopecks) + '</p>' +
+      '</div>' +
+    '</div>' +
+    '<div class="flex items-center justify-between bg-cream rounded-2xl p-1">' +
+      '<button data-name="' + e + '" data-delta="-1" onclick="btnChange(this)" class="w-8 h-8 rounded-xl flex items-center justify-center text-espresso/40 hover:bg-white hover:text-espresso transition-all active:scale-90 ' + (count === 0 ? 'opacity-30' : '') + '">' +
+        '<i class="fas fa-minus text-[10px]"></i>' +
+      '</button>' +
+      '<span class="font-black text-espresso text-sm w-6 text-center">' + count + '</span>' +
+      '<button data-name="' + e + '" data-delta="1" onclick="btnChange(this)" class="w-8 h-8 rounded-xl flex items-center justify-center bg-amber text-white hover:bg-amber-dark transition-all active:scale-90 shadow-sm shadow-amber/20">' +
+        '<i class="fas fa-plus text-[10px]"></i>' +
+      '</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function btnChange(el) {
+  changeItem(dec(el.dataset.name), parseInt(el.dataset.delta));
+}
+
+function escHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function getItemIcon(item) {
+  var n = item.name.toLowerCase();
+  if (n.indexOf('бургер') >= 0 || n.indexOf('воппер') >= 0 || n.indexOf('чизбургер') >= 0) return 'fa-burger';
+  if (n.indexOf('наггет') >= 0 || n.indexOf('стрипс') >= 0 || n.indexOf('криспи') >= 0) return 'fa-drumstick-bite';
+  if (n.indexOf('фри') >= 0 || n.indexOf('картофель') >= 0 || n.indexOf('кольца') >= 0) return 'fa-french-fries';
+  if (n.indexOf('кола') >= 0 || n.indexOf('кока') >= 0 || n.indexOf('липтон') >= 0 || n.indexOf('чай') >= 0 || n.indexOf('фрустайл') >= 0 || n.indexOf('кофе') >= 0 || n.indexOf('напит') >= 0 || n.indexOf('вода') >= 0 || n.indexOf('сок') >= 0 || n.indexOf('милк') >= 0 || n.indexOf('шейк') >= 0 || n.indexOf('сандэй') >= 0) return 'fa-glass-water';
+  if (n.indexOf('соус') >= 0 || n.indexOf('кетчуп') >= 0) return 'fa-droplet';
+  if (n.indexOf('десерт') >= 0 || n.indexOf('маффин') >= 0 || n.indexOf('пирож') >= 0 || n.indexOf('рожок') >= 0) return 'fa-cake-candles';
+  return 'fa-utensils';
+}
+
+function scrollToCat(id) {
+  var el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function changeItem(name, delta) {
+  var current = cart[name] || 0;
+  var next = Math.max(0, current + delta);
+  if (next === 0) delete cart[name];
+  else cart[name] = next;
+  renderMenu();
+  updateCart();
+  saveState();
+}
+
+function onSearchInput(val) {
+  var dd = document.getElementById('searchDropdown');
+  searchHighlightIdx = -1;
+  if (!val || val.length < 1) { dd.classList.add('hidden'); return; }
+  var q = val.toLowerCase();
+  var matches = [];
+  for (var i = 0; i < menuItems.length; i++) {
+    var item = menuItems[i];
+    if (item.name.toLowerCase().indexOf(q) >= 0) matches.push(item);
+  }
+  if (matches.length === 0) { dd.classList.add('hidden'); return; }
+  matches.sort(function(a, b) {
+    var aStart = a.name.toLowerCase().indexOf(q) === 0 ? 0 : 1;
+    var bStart = b.name.toLowerCase().indexOf(q) === 0 ? 0 : 1;
+    if (aStart !== bStart) return aStart - bStart;
+    return a.name.length - b.name.length;
+  });
+  dd.innerHTML = matches.slice(0, 12).map(function(item, i) {
+    var nameSafe = item.name.replace(/"/g, '&quot;');
+    return '<div class="px-4 py-2.5 flex items-center gap-2.5 hover:bg-cream active:bg-cream/80 cursor-pointer transition-colors"' +
+      ' data-name="' + nameSafe + '" data-idx="' + i + '"' +
+      ' onmousedown="pickSearchItem(this)">' +
+      '<span class="text-xs font-bold text-espresso flex-1 truncate">' + highlightMatch(item.name, val) + '</span>' +
+      '<span class="text-[9px] font-bold text-espresso/25">' + fmtPriceKop(item.price_kopecks) + '</span>' +
+    '</div>';
+  }).join('');
+  dd.classList.remove('hidden');
+}
+
+function highlightMatch(name, query) {
+  var idx = name.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return name;
+  return name.slice(0, idx) + '<mark class="bg-amber/20 text-espresso rounded px-0.5">' + name.slice(idx, idx + query.length) + '</mark>' + name.slice(idx + query.length);
+}
+
+function pickSearchItem(el) {
+  var name = el.dataset.name;
+  document.getElementById('searchInput').value = name;
+  document.getElementById('searchDropdown').classList.add('hidden');
+  cart[name] = (cart[name] || 0) + 1;
+  updateCart();
+  saveState();
+  showSearchHint(name);
+}
+
+function onSearchKeydown(e) {
+  var dd = document.getElementById('searchDropdown');
+  var items = dd.querySelectorAll('[data-idx]');
+  if (dd.classList.contains('hidden') || items.length === 0) {
+    if (e.key === 'Enter') { e.preventDefault(); addSearchItem(); }
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    searchHighlightIdx = Math.min(searchHighlightIdx + 1, items.length - 1);
+    items.forEach(function(el, i) { el.classList.toggle('bg-cream', i === searchHighlightIdx); });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    searchHighlightIdx = Math.max(searchHighlightIdx - 1, 0);
+    items.forEach(function(el, i) { el.classList.toggle('bg-cream', i === searchHighlightIdx); });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (searchHighlightIdx >= 0 && searchHighlightIdx < items.length) pickSearchItem(items[searchHighlightIdx]);
+    else addSearchItem();
+  } else if (e.key === 'Escape') dd.classList.add('hidden');
+}
+
+function addSearchItem() {
+  var input = document.getElementById('searchInput');
+  var dropdown = document.getElementById('searchDropdown');
+  dropdown.classList.add('hidden');
+  var name = input.value.trim();
+  if (!name || !menuByName[name.toLowerCase()]) {
+    showToast('Блюдо не найдено в меню этого ресторана', 'warn');
+    return;
+  }
+  cart[name] = (cart[name] || 0) + 1;
+  input.value = '';
+  updateCart();
+  saveState();
+  switchTab('popular');
+  showSearchHint(name);
+}
+
+function showSearchHint(name) {
+  var el = document.getElementById('searchSuggestions');
+  var badge = document.createElement('span');
+  badge.className = 'inline-flex items-center gap-1 bg-sage/10 text-sage-dark text-xs font-bold px-2.5 py-1 rounded-xl fade-in';
+  badge.innerHTML = '<i class="fas fa-check text-[8px]"></i>' + name;
+  el.appendChild(badge);
+  setTimeout(function() { badge.remove(); }, 2500);
+}
+
+function switchTab(tab) {
+  var popular = document.getElementById('tabPopular');
+  var search = document.getElementById('tabSearch');
+  var indicator = document.getElementById('tabIndicator');
+  var btnPopular = document.getElementById('tabBtnPopular');
+  var btnSearch = document.getElementById('tabBtnSearch');
+  document.getElementById('searchDropdown').classList.add('hidden');
+  if (tab === 'popular') {
+    popular.classList.remove('hidden'); search.classList.add('hidden');
+    indicator.style.transform = 'translateX(0)';
+    btnPopular.className = 'relative z-10 flex-1 py-2.5 text-sm font-extrabold text-espresso transition-colors rounded-xl';
+    btnSearch.className = 'relative z-10 flex-1 py-2.5 text-sm font-extrabold text-espresso/40 transition-colors rounded-xl';
+  } else {
+    popular.classList.add('hidden'); search.classList.remove('hidden');
+    indicator.style.transform = 'translateX(100%)';
+    btnPopular.className = 'relative z-10 flex-1 py-2.5 text-sm font-extrabold text-espresso/40 transition-colors rounded-xl';
+    btnSearch.className = 'relative z-10 flex-1 py-2.5 text-sm font-extrabold text-espresso transition-colors rounded-xl';
+    setTimeout(function() { document.getElementById('searchInput').focus(); }, 300);
+  }
+}
+
+function updateCart() {
+  var entries = Object.entries(cart).filter(function(e) { return e[1] > 0; });
+  var cartSection = document.getElementById('cartSection');
+  var emptyState = document.getElementById('emptyState');
+  var cartItems = document.getElementById('cartItems');
+  var cartCount = document.getElementById('cartCount');
+  var cartTotal = document.getElementById('cartTotal');
+
+  if (entries.length === 0) {
+    cartSection.classList.add('hidden');
+    emptyState.classList.remove('hidden');
+    return;
+  }
+  cartSection.classList.remove('hidden');
+  emptyState.classList.add('hidden');
+  var totalItems = entries.reduce(function(s, e) { return s + e[1]; }, 0);
+  cartCount.textContent = totalItems;
+
+  var sum = 0;
+  cartItems.innerHTML = entries.map(function(entry) {
+    var name = entry[0], count = entry[1];
+    var item = menuByName[name.toLowerCase()];
+    var priceKop = item ? item.price_kopecks * count : 0;
+    sum += priceKop;
+    var priceStr = item ? fmtPriceKop(item.price_kopecks * count) : '';
+    var e = enc(name);
+    return '<div class="bg-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm border border-espresso/5 fade-in">' +
+      '<div class="flex-1 min-w-0">' +
+        '<p class="font-extrabold text-espresso text-sm truncate">' + escHtml(name) + '</p>' +
+        (priceStr ? '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + priceStr + '</p>' : '') +
+      '</div>' +
+      '<div class="flex items-center gap-1.5 bg-cream rounded-xl p-0.5">' +
+        '<button data-name="' + e + '" data-delta="-1" onclick="btnCartChange(this)" class="w-7 h-7 rounded-lg flex items-center justify-center text-espresso/40 hover:bg-white transition-all active:scale-90">' +
+          '<i class="fas fa-minus text-[9px]"></i>' +
+        '</button>' +
+        '<span class="font-black text-espresso text-xs w-5 text-center">' + count + '</span>' +
+        '<button data-name="' + e + '" data-delta="1" onclick="btnCartChange(this)" class="w-7 h-7 rounded-lg flex items-center justify-center text-espresso/40 hover:bg-white transition-all active:scale-90">' +
+          '<i class="fas fa-plus text-[9px]"></i>' +
+        '</button>' +
+      '</div>' +
+      '<button data-name="' + e + '" onclick="btnCartRemove(this)" class="w-7 h-7 rounded-lg flex items-center justify-center text-red-300 hover:bg-red-50 hover:text-red-500 transition-all active:scale-90">' +
+        '<i class="fas fa-xmark text-xs"></i>' +
+      '</button>' +
+    '</div>';
+  }).join('');
+
+  cartTotal.textContent = fmtPriceKop(sum);
+}
+
+function btnCartChange(el) {
+  cartChange(dec(el.dataset.name), parseInt(el.dataset.delta));
+}
+
+function btnCartRemove(el) {
+  cartRemove(dec(el.dataset.name));
+}
+
+function cartChange(name, delta) {
+  var current = cart[name] || 0;
+  var next = Math.max(0, current + delta);
+  if (next === 0) delete cart[name];
+  else cart[name] = next;
+  updateCart();
+  renderMenu();
+  saveState();
+}
+
+function cartRemove(name) {
+  delete cart[name];
+  updateCart();
+  renderMenu();
+  saveState();
+}
+
+async function openStoreModal() {
+  var backdrop = document.getElementById('modalBackdrop');
+  var modal = document.getElementById('storeModal');
+  backdrop.classList.remove('hidden');
+  requestAnimationFrame(function() { modal.style.transform = 'translateY(0)'; });
+
+  if (allRestaurants.length === 0) {
+    try {
+      var resp = await fetch(API_BASE + '/restaurants');
+      if (resp.ok) allRestaurants = await resp.json();
+    } catch (e) {
+      console.warn('Failed to load restaurants', e);
+      showToast('Не удалось загрузить список ресторанов. Проверьте, запущен ли сервер.', 'error');
+    }
+  }
+  renderRestaurantList(allRestaurants);
+}
+
+function closeStoreModal() {
+  var backdrop = document.getElementById('modalBackdrop');
+  var modal = document.getElementById('storeModal');
+  modal.style.transform = 'translateY(100%)';
+  setTimeout(function() { backdrop.classList.add('hidden'); }, 300);
+}
+
+function onStoreSearch(val) {
+  clearTimeout(storeSearchTimer);
+  storeSearchTimer = setTimeout(function() {
+    var q = val.trim().toLowerCase();
+    if (!q) { renderRestaurantList(allRestaurants); return; }
+    var filtered = allRestaurants.filter(function(r) {
+      return r.name.toLowerCase().indexOf(q) >= 0 || r.city.toLowerCase().indexOf(q) >= 0;
+    });
+    renderRestaurantList(filtered);
+  }, 200);
+}
+
+function renderRestaurantList(list) {
+  var el = document.getElementById('restaurantList');
+  if (list.length === 0) {
+    el.innerHTML = '<p class="text-xs font-bold text-espresso/20 text-center py-6">Рестораны не найдены</p>';
+    return;
+  }
+  el.innerHTML = list.slice(0, 100).map(function(r) {
+    var eName = enc(r.name);
+    var eCity = escHtml(r.city);
+    var eNameDisplay = escHtml(r.name);
+    return '<button data-id="' + r.id + '" data-name="' + eName + '" onclick="btnSelectRestaurant(this)"' +
+      ' class="w-full text-left bg-white hover:bg-amber/5 rounded-xl px-4 py-3 border border-espresso/5 transition-all active:scale-[0.98] flex items-center gap-3">' +
+      '<div class="w-7 h-7 bg-espresso/5 rounded-xl flex items-center justify-center flex-shrink-0">' +
+        '<i class="fas fa-store text-espresso/20 text-xs"></i>' +
+      '</div>' +
+      '<div class="min-w-0 flex-1">' +
+        '<p class="text-xs font-bold text-espresso truncate">' + eNameDisplay + '</p>' +
+        '<p class="text-[9px] font-bold text-espresso/30 mt-0.5">' + eCity + '</p>' +
+      '</div>' +
+      '<i class="fas fa-chevron-right text-espresso/15 text-[9px]"></i>' +
+    '</button>';
+  }).join('');
+}
+
+function btnSelectRestaurant(el) {
+  selectRestaurant(parseInt(el.dataset.id), dec(el.dataset.name));
+}
+
+async function selectRestaurant(id, name) {
+  if (id == restaurantId) { closeStoreModal(); return; }
+  restaurantId = String(id);
+  restaurantName = name;
+  closeStoreModal();
+  document.getElementById('storeLabel').textContent = name || id;
+  showToast('Выбран ресторан: ' + name, 'ok');
+  cart = {};
+  saveState();
+  await fetchMenu();
+  renderMenu();
+  updateCart();
+}
+
+async function runOptimization() {
+  var items = [];
+  var cartEntries = Object.entries(cart);
+  for (var i = 0; i < cartEntries.length; i++) {
+    var name = cartEntries[i][0], count = cartEntries[i][1];
+    for (var j = 0; j < count; j++) items.push(name);
+  }
+  if (items.length === 0) return;
+
+  var loader = document.getElementById('loaderOverlay');
+  var btn = document.getElementById('calcBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner spin-soft"></i> Считаем...';
+  loader.classList.remove('hidden');
+
+  try {
+    var resp = await fetch(API_BASE + '/optimize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: items, store: restaurantId }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    showResult(data);
+  } catch (err) {
+    showToast('Ошибка: ' + err.message, 'error');
+  } finally {
+    loader.classList.add('hidden');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Рассчитать выгоду';
+  }
+}
+
+function showResult(data) {
+  var sheet = document.getElementById('resultSheet');
+  var content = document.getElementById('resultContent');
+  var plan = data.plan || {};
+  var combos = plan.combos || [];
+  var monoCoupons = plan.mono_coupons || {};
+  var remaining = plan.remaining || {};
+
+  var html = '';
+
+  html += '<div class="flex items-center gap-4 mb-5 bg-white rounded-3xl p-5 shadow-sm border border-espresso/5">' +
+    '<div class="flex-1">' +
+      '<p class="text-xs font-bold text-espresso/30 uppercase tracking-wider mb-1">Обычная цена</p>' +
+      '<p class="font-black text-espresso/30 text-xl line-through decoration-2">' + fmtPrice(data.menu_total) + '</p>' +
+    '</div>' +
+    '<div class="w-10 h-10 bg-cream rounded-2xl flex items-center justify-center">' +
+      '<i class="fas fa-arrow-right text-espresso/20"></i>' +
+    '</div>' +
+    '<div class="flex-1 text-right">' +
+      '<p class="text-xs font-bold text-sage uppercase tracking-wider mb-1">С выгодой</p>' +
+      '<p class="font-black text-sage text-2xl">' + fmtPrice(data.best_total) + '</p>' +
+    '</div>' +
+  '</div>';
+
+  if (data.savings > 0) {
+    html += '<div class="bg-sage/10 border-2 border-sage/20 rounded-3xl px-5 py-4 mb-5 flex items-center gap-3 fade-in">' +
+      '<div class="w-10 h-10 bg-sage rounded-2xl flex items-center justify-center flex-shrink-0">' +
+        '<i class="fas fa-piggy-bank text-white text-sm"></i>' +
+      '</div>' +
+      '<div>' +
+        '<p class="text-xs font-bold text-sage-dark/60 uppercase tracking-wider">Вы экономите</p>' +
+        '<p class="font-black text-sage-dark text-xl">' + fmtPrice(data.savings) + '</p>' +
+      '</div>' +
+    '</div>';
+  }
+
+  if (data.not_found && data.not_found.length > 0) {
+    html += '<div class="bg-amber/10 border-2 border-amber/20 rounded-3xl px-5 py-4 mb-5">' +
+      '<p class="text-xs font-bold text-amber-dark uppercase tracking-wider mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>Не найдено</p>' +
+      '<p class="text-sm font-bold text-espresso/50">' + data.not_found.join(', ') + '</p>' +
+    '</div>';
+  }
+
+  if (combos.length > 0) {
+    for (var ci = 0; ci < combos.length; ci++) {
+      var combo = combos[ci];
+      html += '<div class="mb-4">' +
+        '<div class="flex items-center gap-2 mb-2.5">' +
+          '<div class="w-6 h-6 bg-amber rounded-lg flex items-center justify-center flex-shrink-0">' +
+            '<i class="fas fa-tags text-white text-[9px]"></i>' +
+          '</div>' +
+          '<h4 class="font-extrabold text-espresso text-sm">' + combo.name + '</h4>' +
+          '<span class="ml-auto bg-amber/10 text-amber-dark text-xs font-black px-2.5 py-1 rounded-xl">' + fmtPrice(combo.effective_price) + '</span>' +
+        '</div>' +
+        '<div class="bg-white rounded-2xl border border-espresso/5 overflow-hidden shadow-sm" style="border-left: 3px solid #F59E0B;">' +
+          '<div class="px-4 py-3 space-y-2">';
+
+      var comboItems = combo.items || [];
+      for (var ii = 0; ii < comboItems.length; ii++) {
+        var item = comboItems[ii];
+        var isChanged = item.wanted !== item.selected;
+        var isSauce = item.is_sauce;
+        var dotClass = isSauce ? 'bg-sage/40' : (isChanged ? 'bg-amber' : 'bg-espresso/15');
+        html += '<div class="flex items-center gap-2">' +
+          '<div class="w-1.5 h-1.5 rounded-full flex-shrink-0 ' + dotClass + '"></div>' +
+          '<div class="flex-1 min-w-0">';
+        if (isSauce) {
+          html += '<span class="text-xs font-bold text-espresso/30">' + item.selected + '</span>';
+        } else if (isChanged) {
+          html += '<span class="text-xs font-bold text-espresso/40 line-through">' + item.wanted + '</span> <i class="fas fa-arrow-right text-[8px] text-amber mx-0.5"></i> <span class="text-xs font-extrabold text-espresso">' + item.selected + '</span>';
+        } else {
+          html += '<span class="text-xs font-bold text-espresso">' + item.selected + '</span>';
+        }
+        html += '</div></div>';
+      }
+      html += '</div></div></div>';
+    }
+  }
+
+  var monoEntries = Object.entries(monoCoupons);
+  if (monoEntries.length > 0) {
+    html += '<div class="mb-4">';
+    html += '<div class="flex items-center gap-2 mb-2.5">' +
+      '<div class="w-6 h-6 bg-sage rounded-lg flex items-center justify-center flex-shrink-0">' +
+        '<i class="fas fa-ticket text-white text-[9px]"></i>' +
+      '</div>' +
+      '<h4 class="font-extrabold text-espresso text-sm">Купоны</h4>' +
+    '</div>';
+    for (var mi = 0; mi < monoEntries.length; mi++) {
+      var entry = monoEntries[mi];
+      var name = entry[0], info = entry[1];
+      html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3" style="border-left: 3px solid #10B981;">' +
+        '<div class="flex-1 min-w-0">' +
+          '<p class="text-xs font-bold text-espresso/40 truncate">' + name + '</p>' +
+          '<p class="font-extrabold text-sage-dark text-xs mt-0.5">' + info.coupon_name + '</p>' +
+        '</div>' +
+        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(info.price) + '</span>' +
+      '</div>';
+    }
+    html += '</div>';
+  }
+
+  var remainingEntries = Object.entries(remaining);
+  if (remainingEntries.length > 0) {
+    html += '<div class="mb-4">';
+    html += '<div class="flex items-center gap-2 mb-2.5">' +
+      '<div class="w-6 h-6 bg-espresso/10 rounded-lg flex items-center justify-center flex-shrink-0">' +
+        '<i class="fas fa-receipt text-espresso/30 text-[9px]"></i>' +
+      '</div>' +
+      '<h4 class="font-extrabold text-espresso text-sm">Отдельно</h4>' +
+    '</div>';
+    for (var ri = 0; ri < remainingEntries.length; ri++) {
+      var entry = remainingEntries[ri];
+      var name = entry[0], info = entry[1];
+      html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3">' +
+        '<div class="flex-1 min-w-0">' +
+          '<p class="font-bold text-espresso text-xs truncate">' + name + (info.count > 1 ? ' x' + info.count : '') + '</p>' +
+          (info.coupon ? '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + info.coupon + '</p>' : '') +
+        '</div>' +
+        '<span class="font-black text-espresso text-sm">' + fmtPrice(info.price * (info.count || 1)) + '</span>' +
+      '</div>';
+    }
+    html += '</div>';
+  }
+
+  if (data.stats) {
+    var s = data.stats;
+    html += '<div class="bg-espresso/3 rounded-2xl px-4 py-3 mt-2">' +
+      '<p class="text-[10px] font-bold text-espresso/25 uppercase tracking-wider mb-2">Статистика</p>' +
+      '<div class="grid grid-cols-3 gap-2 text-center">' +
+        '<div><p class="font-black text-espresso text-sm">' + (s.menu_items_total || 0) + '</p><p class="text-[9px] font-bold text-espresso/30">блюд в меню</p></div>' +
+        '<div><p class="font-black text-espresso text-sm">' + (s.combos_total || 0) + '</p><p class="text-[9px] font-bold text-espresso/30">комбо</p></div>' +
+        '<div><p class="font-black text-espresso text-sm">' + (s.combos_relevant || 0) + '</p><p class="text-[9px] font-bold text-espresso/30">релевантных</p></div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  content.innerHTML = html;
+  sheet.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeResult() {
+  document.getElementById('resultSheet').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function escapeHtml(str) {
+  return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function escapeAttr(str) {
+  return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function showToast(message, type) {
+  var container = document.getElementById('toastContainer');
+  var toast = document.createElement('div');
+  var bg = type === 'warn' ? 'bg-amber-dark' : type === 'error' ? 'bg-red-500' : 'bg-sage-dark';
+  var icon = type === 'warn' ? 'fa-triangle-exclamation' : type === 'error' ? 'fa-circle-xmark' : 'fa-check-circle';
+  toast.className = bg + ' text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-lg flex items-center gap-2 pointer-events-auto toast-in';
+  toast.innerHTML = '<i class="fas ' + icon + ' text-white/70"></i><span>' + message + '</span>';
+  container.appendChild(toast);
+  setTimeout(function() {
+    toast.classList.remove('toast-in');
+    toast.classList.add('toast-out');
+    toast.addEventListener('animationend', function() { toast.remove(); });
+  }, 3500);
+}
+
+function saveState() {
+  try {
+    localStorage.setItem('ks_cart', JSON.stringify(cart));
+    localStorage.setItem('ks_store', restaurantId);
+    localStorage.setItem('ks_store_name', restaurantName);
+  } catch (e) {}
+}
+
+function loadState() {
+  try {
+    var saved = localStorage.getItem('ks_cart');
+    if (saved) cart = JSON.parse(saved);
+    var store = localStorage.getItem('ks_store');
+    if (store) restaurantId = store;
+    var name = localStorage.getItem('ks_store_name');
+    if (name) restaurantName = name;
+  } catch (e) {}
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

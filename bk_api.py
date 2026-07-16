@@ -14,14 +14,15 @@ SESSION_HEADERS = {
 }
 
 CACHE_DIR = "bk_all_menus"
+OFFLINE_COMBINED = "bk_all_menus_combined.json"
 STRUCT_PATH = "combo_structures.json"
 
 POTATO_WORDS = {"фри", "картофель"}
 
 UPSELL_MATRIX = {
-    "small_fries":  {"nuggets_3": 4.99, "nuggets_6": 49.99, "nuggets_9": 79.99, "medium_fries": 29.99, "large_fries": 49.99, "maxx_fries": 119.99},
-    "medium_fries": {"nuggets_3": 0.0,  "nuggets_6": 19.99, "nuggets_9": 39.99, "large_fries": 39.99, "maxx_fries": 89.99},
-    "large_fries":  {"nuggets_6": 0.0,  "nuggets_9": 19.99, "maxx_fries": 49.99},
+    "small_fries":  {"nuggets_3": 4.99, "nuggets_6": 49.99, "nuggets_9": 79.99, "nuggets_12": 109.99, "medium_fries": 29.99, "large_fries": 49.99, "maxx_fries": 119.99},
+    "medium_fries": {"nuggets_3": 0.0,  "nuggets_6": 19.99, "nuggets_9": 39.99, "nuggets_12": 69.99, "large_fries": 39.99, "maxx_fries": 89.99},
+    "large_fries":  {"nuggets_6": 0.0,  "nuggets_9": 19.99, "nuggets_12": 49.99, "maxx_fries": 49.99},
 }
 DEFAULT_UPCHARGE = 19.99
 
@@ -92,10 +93,15 @@ def load_data(rid="1002", mode="auto"):
             with open(dynamic_cache, encoding="utf-8") as f:
                 raw = json.load(f)
             menu = raw.get("menu", {}).get("result") or raw.get("result") or raw
-        else:
+        elif os.path.exists(OFFLINE_COMBINED):
+            with open(OFFLINE_COMBINED, encoding="utf-8") as f:
+                all_menus = json.load(f)
+            if rid in all_menus:
+                menu = all_menus[rid].get("menu", {}).get("result") or all_menus[rid].get("result")
+        if menu is None:
             raise FileNotFoundError(
-                f"No cached menu for restaurant {rid} at {dynamic_cache}. "
-                "Run with mode='live' to download, or copy the file from a prior fetch."
+                f"No menu data for restaurant {rid}. "
+                "Run with mode='live' to download, or provide offline cache."
             )
 
     with open(STRUCT_PATH, encoding="utf-8") as f:
@@ -344,7 +350,7 @@ def tag_side(name):
     if "наггетсы (9 шт.)" in nl:
         return "nuggets_9"
     if "наггетсы (12 шт.)" in nl:
-        return "nuggets_9"
+        return "nuggets_12"
     if "maxx" in nl and ("фри" in nl or "картофель" in nl):
         return "maxx_fries"
     if ("большой" in nl or "стандартный" in nl) and ("фри" in nl or "картофель" in nl):

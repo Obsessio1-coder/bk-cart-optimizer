@@ -1,10 +1,11 @@
 import sys, os, re, json
 from collections import Counter
 from itertools import combinations
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BASE_DIR)
 
 from bk_api import (
     load_data, build_menu_index, build_combo_prices, build_menu_id_set,
@@ -50,7 +51,7 @@ def _prep_mono_coupons(menu, struct, menu_by_id, menu_id_set, restaurant_id):
         for d in dishes:
             did = d.get("dish_id")
             if did and did in menu_by_id:
-                dish_price = d.get("price", fallback_price)
+                dish_price = d.get("price", fallback_price) / 100
                 mono_coupons.append((did, cname, dish_price))
 
     discount_map = {}
@@ -240,7 +241,7 @@ def optimize_api(wanted_list, restaurant_id="1002", mode="auto"):
         "remaining": {k: v for k, v in remaining_mono.items() if v > 0},
         "total": indiv_eff,
         "combo_total": 0,
-        "savings": 0,
+        "savings": round(indiv_total - indiv_eff, 2),
     }
 
     for r in range(min(len(relevant), 3)):
@@ -394,57 +395,71 @@ def optimize():
     return jsonify(result)
 
 
+def _load_restaurants():
+    path = os.path.join(BASE_DIR, "bk_all_menus", "__restaurants.json")
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _build_group_map(menu):
+    groups_map = {}
+    for g in menu.get("groups", []):
+        mi = g["main_info"]
+        gid = mi["id"]
+        gname = mi["name"]
+        for did in g.get("included_dishes", []):
+            groups_map.setdefault(did, []).append(gname)
+    return groups_map
+
+
+@app.route("/restaurants", methods=["GET"])
+def get_restaurants():
+    search = request.args.get("search", "").strip().lower()
+
+    try:
+        all_restaurants = _load_restaurants()
+        result = []
+        for r in all_restaurants:
+            name = r.get("name", "")
+            city = r.get("city", {}).get("city_name", "")
+            rid = r["id"]
+            if search:
+                if search not in name.lower() and search not in city.lower():
+                    continue
+            result.append({"id": rid, "name": name, "city": city})
+
+        result.sort(key=lambda x: (x["city"], x["name"]))
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/menu", methods=["GET"])
 def get_menu():
     restaurant_id = str(request.args.get("store", "1002"))
     mode = request.args.get("mode", "auto")
 
     try:
-        ref_menu, _, _ = load_data(rid="1002", mode=mode)
-        target_menu, _, _ = load_data(rid=restaurant_id, mode=mode)
-
-        # Global catalog: all dishes from reference restaurant (1002), unique by name
-        ref_by_name = {}
-        for d in ref_menu.get("dishes", []):
-            mi = d["main_info"]
-            name = mi["name"].strip()
-            nl = name.lower()
-            if nl not in ref_by_name:
-                ref_by_name[nl] = {"id": mi["id"], "name": name, "price": mi["price"]}
-
-        # Target lookup: id → {price_kopecks, name}
-        target_by_id = {}
-        for d in target_menu.get("dishes", []):
-            mi = d["main_info"]
-            target_by_id[mi["id"]] = {"price": mi["price"], "name": mi["name"].strip()}
+        menu, _, _ = load_data(rid=restaurant_id, mode=mode)
+        groups_map = _build_group_map(menu)
 
         items = []
-        for nl, ref in ref_by_name.items():
-            t = target_by_id.get(ref["id"])
-            if t and t["price"] > 0:
+        for d in menu.get("dishes", []):
+            mi = d["main_info"]
+            price = mi["price"]
+            name = mi["name"].strip()
+            did = mi["id"]
+
+            if price > 0 and not mi.get("restricted", False):
                 items.append({
-                    "name": ref["name"],
-                    "price": round(t["price"] / 100, 2),
-                    "is_available": True,
-                })
-            else:
-                items.append({
-                    "name": ref["name"],
-                    "price": round(ref["price"] / 100, 2),
-                    "is_available": False,
+                    "name": name,
+                    "price_kopecks": price,
+                    "groups": groups_map.get(did, []),
+                    "card_type": mi.get("card_type", "standard"),
                 })
 
-        # Include items present in target but missing from the reference catalog
-        seen_ids = {ref["id"] for ref in ref_by_name.values()}
-        for did, t in target_by_id.items():
-            if t["price"] > 0 and did not in seen_ids:
-                items.append({
-                    "name": t["name"],
-                    "price": round(t["price"] / 100, 2),
-                    "is_available": True,
-                })
-
-        items.sort(key=lambda x: (not x["is_available"], x["name"]))
+        items.sort(key=lambda x: x["name"])
         return jsonify(items)
 
     except FileNotFoundError:
@@ -456,6 +471,11 @@ def get_menu():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route("/")
+def serve_frontend():
+    return send_from_directory(BASE_DIR, "index.html")
 
 
 # Vercel Python Serverless entry point
