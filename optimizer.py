@@ -456,7 +456,7 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
         struct_entry = struct["combos"].get(str(cid))
         if not struct_entry:
             continue
-        normalized = normalize_combo(entry, struct_entry, rid)
+        normalized = normalize_combo(entry, struct_entry, rid, menu_by_id=menu_by_id)
         lc = normalized.get("lifecycle", {})
         if not (lc.get("is_active") and lc.get("is_available") and lc.get("is_visible")):
             continue
