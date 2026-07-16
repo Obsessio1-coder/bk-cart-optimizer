@@ -385,11 +385,6 @@ def normalize_combo(raw_combo, struct_entry, restaurant_id, menu_by_id=None):
                 continue
             did = d.get("dish_id")
             price_kopecks = d.get("price", 0)
-            if menu_by_id is not None and did and did not in menu_by_id:
-                continue
-            if menu_by_id is not None and did and did in menu_by_id:
-                if menu_by_id[did].get("price", 0) == 0:
-                    continue
             options.append({
                 "option_id": str(did) if did else dish_name,
                 "name": dish_name,
