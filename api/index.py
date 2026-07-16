@@ -235,10 +235,16 @@ def optimize_api(wanted_list, restaurant_id="1002", mode="auto"):
             remaining_mono[item_name] = 0
             mono_items_used.add(item_name)
 
+    initial_remaining = {}
+    for item_name, cnt in remaining_mono.items():
+        if cnt > 0:
+            price = effective_prices.get(item_name.lower(), 0)
+            combo_only = item_name.lower() not in menu_prices
+            initial_remaining[item_name] = {"count": cnt, "price": price, "combo_only": combo_only}
     best_state = {
         "mono_items_used": mono_items_used,
         "combos": [],
-        "remaining": {k: v for k, v in remaining_mono.items() if v > 0},
+        "remaining": initial_remaining,
         "total": indiv_eff,
         "combo_total": 0,
         "savings": round(indiv_total - indiv_eff, 2),
@@ -326,15 +332,17 @@ def optimize_api(wanted_list, restaurant_id="1002", mode="auto"):
                             "count": 1,
                             "price": mono_plan[item_name][1],
                             "coupon": mono_plan[item_name][0],
+                            "combo_only": False,
                         }
                         remaining[item_name] -= 1
                     else:
                         price = effective_prices.get(item_name.lower(), 0)
                         cnt = remaining[item_name]
-                        total_rem += price * cnt
+                        combo_only = item_name.lower() not in menu_prices
                         remaining_detail[item_name] = {
                             "count": cnt,
                             "price": price,
+                            "combo_only": combo_only,
                         }
                         remaining[item_name] = 0
 

@@ -81,6 +81,17 @@ tailwind.config = {
   }
   .toast-in { animation: toast-in 0.25s ease-out; }
   .toast-out { animation: toast-out 0.25s ease-in forwards; }
+  .scroll-top-btn {
+    position: fixed; bottom: 24px; right: 24px; z-index: 40;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: #4A1E12; color: white; border: none;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(74,30,18,0.25);
+    cursor: pointer; transition: transform 0.2s, opacity 0.3s;
+    opacity: 0; transform: translateY(12px); pointer-events: none;
+  }
+  .scroll-top-btn.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .scroll-top-btn:active { transform: scale(0.9); }
 </style>
 </head>
 <body class="min-h-screen pb-8">
@@ -202,6 +213,10 @@ tailwind.config = {
 
 <div id="toastContainer" class="fixed top-20 left-1/2 -translate-x-1/2 z-[70] flex flex-col items-center gap-2 pointer-events-none max-w-lg w-full px-4"></div>
 
+<button id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})" class="scroll-top-btn" aria-label="Наверх">
+  <i class="fas fa-chevron-up"></i>
+</button>
+
 <div id="loaderOverlay" class="fixed inset-0 z-[60] bg-espresso/60 backdrop-blur-md hidden flex items-center justify-center">
   <div class="text-center">
     <div class="w-16 h-16 border-4 border-cream/20 border-t-amber rounded-full spin-soft mx-auto mb-4"></div>
@@ -253,11 +268,15 @@ async function fetchMenu() {
 }
 
 function fmtPriceKop(kopecks) {
-  return (kopecks / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' \u20BD';
+  var n = Number(kopecks);
+  if (isNaN(n)) return '— \u20BD';
+  return (n / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' \u20BD';
 }
 
 function fmtPrice(val) {
-  return Number(val).toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' \u20BD';
+  var n = Number(val);
+  if (isNaN(n)) return '— \u20BD';
+  return n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' \u20BD';
 }
 
 function buildCategoryMap() {
@@ -286,17 +305,17 @@ function renderMenu() {
 
   const nav = document.getElementById('categoryNav');
   nav.innerHTML = catKeys.map(function(c) {
-    var safe = c.replace(/"/g, '&quot;');
-    return '<button onclick="scrollToCat(\'' + safe + '\')" class="flex-shrink-0 bg-white hover:bg-amber/10 text-espresso/50 hover:text-amber-dark text-[10px] font-extrabold px-3.5 py-1.5 rounded-full border border-espresso/5 transition-all active:scale-95">' + c + '</button>';
+    var e = enc(c);
+    return '<button data-cat="' + e + '" onclick="btnScrollToCat(this)" class="flex-shrink-0 bg-white hover:bg-amber/10 text-espresso/50 hover:text-amber-dark text-[10px] font-extrabold px-3.5 py-1.5 rounded-full border border-espresso/5 transition-all active:scale-95">' + escHtml(c) + '</button>';
   }).join('');
 
   const content = document.getElementById('categoryContent');
   content.innerHTML = catKeys.map(function(cat) {
-    var safe = cat.replace(/"/g, '&quot;');
+    var e = enc(cat);
     var itemsHtml = cats[cat].map(function(item) { return renderItemCard(item); }).join('');
-    return '<div id="cat-' + safe + '" class="cat-section mb-5">' +
+    return '<div id="cat-' + e + '" class="cat-section mb-5">' +
       '<div class="flex items-center gap-2 mb-3">' +
-        '<h3 class="font-nunito font-black text-espresso text-sm">' + cat + '</h3>' +
+        '<h3 class="font-nunito font-black text-espresso text-sm">' + escHtml(cat) + '</h3>' +
         '<span class="text-[9px] font-bold text-espresso/20 bg-espresso/5 px-2 py-0.5 rounded-full">' + cats[cat].length + '</span>' +
       '</div>' +
       '<div class="grid grid-cols-2 gap-3">' + itemsHtml + '</div>' +
@@ -348,8 +367,13 @@ function getItemIcon(item) {
   return 'fa-utensils';
 }
 
+function btnScrollToCat(el) {
+  var cat = dec(el.dataset.cat);
+  scrollToCat(cat);
+}
+
 function scrollToCat(id) {
-  var el = document.getElementById(id);
+  var el = document.getElementById('cat-' + id);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -778,12 +802,15 @@ function showResult(data) {
     for (var ri = 0; ri < remainingEntries.length; ri++) {
       var entry = remainingEntries[ri];
       var name = entry[0], info = entry[1];
+      var priceDisplay = info.combo_only
+        ? '<span class="font-black text-espresso text-[10px] text-sage">только в комбо</span>'
+        : '<span class="font-black text-espresso text-sm">' + safeFmtPrice(info.price * (info.count || 1)) + '</span>';
       html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3">' +
         '<div class="flex-1 min-w-0">' +
           '<p class="font-bold text-espresso text-xs truncate">' + name + (info.count > 1 ? ' x' + info.count : '') + '</p>' +
           (info.coupon ? '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + info.coupon + '</p>' : '') +
         '</div>' +
-        '<span class="font-black text-espresso text-sm">' + fmtPrice(info.price * (info.count || 1)) + '</span>' +
+        priceDisplay +
       '</div>';
     }
     html += '</div>';
@@ -853,7 +880,13 @@ function loadState() {
   } catch (e) {}
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', function() {
+  init();
+  var scrollBtn = document.getElementById('scrollTopBtn');
+  window.addEventListener('scroll', function() {
+    scrollBtn.classList.toggle('visible', window.scrollY > 300);
+  });
+});
 </script>
 </body>
 </html>

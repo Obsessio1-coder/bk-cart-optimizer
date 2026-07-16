@@ -96,6 +96,14 @@ def _fuzzy_match(user_name, candidates):
         for kw in ("наггет", "кола", "воппер"):
             if kw in ul and kw in cl:
                 score += 20
+        # Penalty for extra words in candidate (e.g. "Evervess Cola" vs "Evervess Cola вишневая")
+        if u_words < s_words:
+            score -= len(s_words - u_words) * 10
+        if s_words < u_words:
+            score -= len(u_words - s_words) * 10
+        # Bonus if user query is a prefix of the candidate (same start)
+        if cl.startswith(ul):
+            score += 15
         if score > best_score:
             best_score, best = score, c
     return best if best_score >= 12 else None
