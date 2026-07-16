@@ -427,6 +427,16 @@ def build_frontend_response(result):
             combo_only = item_name.lower() not in menu_prices
             remaining[item_name] = {"count": cnt, "price_kopecks": price_kop, "combo_only": combo_only}
 
+    multi_used = best_costs.get("multi_used", [])
+    multi_coupons = []
+    for m in multi_used:
+        items_list = [{"name": iname, "count": icnt} for iname, icnt in m["items"].items()]
+        multi_coupons.append({
+            "name": m["name"],
+            "items": items_list,
+            "price_kopecks": round(m["price"] * 100),
+        })
+
     saving_tip = best_costs.get("saving_tip", "")
 
     return {
@@ -437,6 +447,7 @@ def build_frontend_response(result):
         "plan": {
             "combos": combos_list,
             "mono_coupons": mono_coupons,
+            "multi_coupons": multi_coupons,
             "remaining": remaining,
         },
     }

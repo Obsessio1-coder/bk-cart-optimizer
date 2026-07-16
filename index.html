@@ -856,6 +856,34 @@ function showResult(data) {
     html += '</div>';
   }
 
+  var multiCoupons = plan.multi_coupons || [];
+  if (multiCoupons.length > 0) {
+    html += '<div class="mb-4">';
+    html += '<div class="flex items-center gap-2 mb-2.5">' +
+      '<div class="w-6 h-6 bg-sage/20 rounded-lg flex items-center justify-center flex-shrink-0">' +
+        '<i class="fas fa-tags text-sage-dark text-[9px]"></i>' +
+      '</div>' +
+      '<h4 class="font-extrabold text-espresso text-sm">Мульти-купон</h4>' +
+    '</div>';
+    for (var mi = 0; mi < multiCoupons.length; mi++) {
+      var mc = multiCoupons[mi];
+      var itemsHtml = '';
+      for (var mci = 0; mci < mc.items.length; mci++) {
+        var miName = mc.items[mci].name;
+        var miCount = mc.items[mci].count || 1;
+        itemsHtml += '<p class="font-bold text-espresso text-xs truncate">' + miName + (miCount > 1 ? ' x' + miCount : '') + '</p>';
+      }
+      html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3" style="border-left: 3px solid #10B981;">' +
+        '<div class="flex-1 min-w-0">' +
+          '<p class="font-bold text-sage-dark text-xs mb-1">' + mc.name + '</p>' +
+          itemsHtml +
+        '</div>' +
+        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(mc.price_kopecks / 100) + '</span>' +
+      '</div>';
+    }
+    html += '</div>';
+  }
+
   var remainingEntries = Object.entries(remaining);
   if (remainingEntries.length > 0) {
     html += '<div class="mb-4">';
