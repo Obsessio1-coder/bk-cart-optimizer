@@ -419,13 +419,13 @@ def build_frontend_response(result):
             cn, cp = mono_plan[item_name]
             mono_coupons[item_name] = {"coupon_name": cn, "price_kopecks": round(cp * 100), "count": cnt}
 
+    leftover = best_costs.get("leftover", {})
     remaining = {}
-    for item_name, cnt in final_remaining.items():
+    for item_name, cnt in leftover.items():
         if cnt > 0:
             price_kop = round(menu_prices.get(item_name.lower(), 0) * 100)
-            if item_name in mono_plan:
-                price_kop = round(mono_plan[item_name][1] * 100)
-            remaining[item_name] = {"count": cnt, "price_kopecks": price_kop}
+            combo_only = item_name.lower() not in menu_prices
+            remaining[item_name] = {"count": cnt, "price_kopecks": price_kop, "combo_only": combo_only}
 
     saving_tip = best_costs.get("saving_tip", "")
 

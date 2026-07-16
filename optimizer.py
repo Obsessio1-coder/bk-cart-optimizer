@@ -535,11 +535,13 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
     for item_name, cnt in remaining_multi.items():
         if cnt > 0:
             initial_total += effective_prices.get(item_name.lower(), 0) * cnt
+    initial_leftover = {k: v for k, v in remaining_multi.items() if v > 0}
     best_state = (mono_items_used, [], remaining_multi, [], {
         "total": initial_total,
         "with_sauce": initial_total,
         "without_sauce": initial_total,
         "saving_tip": "",
+        "leftover": initial_leftover,
     })
     if initial_total < best_total:
         best_total = initial_total
@@ -622,6 +624,7 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
             total_rem += _apply_multi_mono(remaining, multi_mono_coupons, dish_idx)
 
             # Потом однослотовые моно-купон и остаток
+            leftover = {}
             for item_name in list(remaining.keys()):
                 if remaining[item_name] > 0:
                     if item_name in mono_plan:
@@ -630,7 +633,9 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
                         mono_used[item_name] = cnt
                         remaining[item_name] = 0
                     else:
-                        total_rem += effective_prices.get(item_name.lower(), 0) * remaining[item_name]
+                        cnt = remaining[item_name]
+                        total_rem += effective_prices.get(item_name.lower(), 0) * cnt
+                        leftover[item_name] = cnt
                         remaining[item_name] = 0
 
             if all(remaining.get(n, 0) <= 0 for n in order):
@@ -643,6 +648,7 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
                         "with_sauce": total_with_sauce + total_rem,
                         "without_sauce": total_without_sauce + total_rem,
                         "saving_tip": "",
+                        "leftover": leftover,
                     })
 
     return best_total, best_state, effective_prices, mono_plan, indiv_eff
@@ -763,15 +769,14 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
                 else:
                     print(f"      {actual}")
 
-    if final_remaining:
-        leftover = {k: v for k, v in final_remaining.items() if v > 0}
-        if leftover:
-            extra_cost = sum(best_eff.get(i.lower(), 0) * c for i, c in leftover.items())
-            print(f"\nОтдельно ({extra_cost:.2f} руб):")
-            for item, cnt in leftover.items():
-                p = best_eff.get(item.lower(), 0)
-                if cnt > 0:
-                    print(f"  + {item} x{cnt} = {p*cnt:.2f}")
+    leftover = best_costs.get("leftover", {})
+    if leftover:
+        extra_cost = sum(best_eff.get(i.lower(), 0) * c for i, c in leftover.items())
+        print(f"\nОтдельно ({extra_cost:.2f} руб):")
+        for item, cnt in leftover.items():
+            p = best_eff.get(item.lower(), 0)
+            if cnt > 0:
+                print(f"  + {item} x{cnt} = {p*cnt:.2f}")
 
     w_sauce = best_costs.get("with_sauce", best_total)
     wo_sauce = best_costs.get("without_sauce", best_total)
