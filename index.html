@@ -351,7 +351,7 @@ function renderItemCard(item) {
       '</div>' +
       '<div class="min-w-0">' +
         '<p class="font-extrabold text-espresso text-xs leading-tight">' + escHtml(item.name) + '</p>' +
-        '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + fmtPriceKop(item.price_kopecks) + '</p>' +
+        '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks)) + '</p>' +
       '</div>' +
     '</div>' +
     '<div class="flex items-center justify-between bg-cream rounded-2xl p-1">' +
@@ -427,7 +427,7 @@ function onSearchInput(val) {
       ' data-name="' + nameSafe + '" data-idx="' + i + '"' +
       ' onmousedown="pickSearchItem(this)">' +
       '<span class="text-xs font-bold text-espresso flex-1 truncate">' + highlightMatch(item.name, val) + '</span>' +
-      '<span class="text-[9px] font-bold text-espresso/25">' + fmtPriceKop(item.price_kopecks) + '</span>' +
+      '<span class="text-[9px] font-bold text-espresso/25">' + (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks)) + '</span>' +
     '</div>';
   }).join('');
   dd.classList.remove('hidden');
@@ -542,7 +542,7 @@ function updateCart() {
     var item = menuByName[name.toLowerCase()];
     var priceKop = item ? item.price_kopecks * count : 0;
     sum += priceKop;
-    var priceStr = item ? fmtPriceKop(item.price_kopecks * count) : '';
+    var priceStr = item ? (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks * count)) : '';
     var e = enc(name);
     return '<div class="bg-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm border border-espresso/5 fade-in">' +
       '<div class="flex-1 min-w-0">' +

@@ -10,6 +10,7 @@ sys.path.insert(0, BASE_DIR)
 from bk_api import (
     load_data, build_menu_index, build_combo_prices, build_menu_id_set,
     normalize_combo, validate_coupon_visibility, default_coupon_context,
+    tag_sauce,
     POTATO_WORDS, UPSELL_MATRIX, DEFAULT_UPCHARGE,
 )
 
@@ -481,7 +482,15 @@ def _build_group_map(menu):
         gid = mi["id"]
         gname = mi["name"]
         for did in g.get("included_dishes", []):
-            groups_map.setdefault(did, []).append(gname)
+            grps = groups_map.setdefault(did, [])
+            if gname not in grps:
+                grps.append(gname)
+
+    # Remove generic "Эвервесс Кола" for dishes that have a more specific cola group
+    cola_specific = {"Эвервесс Кола Вишня", "Эвервесс Кола без сахара"}
+    for did, grps in groups_map.items():
+        if "Эвервесс Кола" in grps and any(s in grps for s in cola_specific):
+            groups_map[did] = [g for g in grps if g != "Эвервесс Кола"]
     return groups_map
 
 
@@ -508,6 +517,58 @@ def get_restaurants():
         return jsonify({"error": str(e)}), 500
 
 
+def _load_coupon_only_items():
+    """Load items that exist in coupon/combos but not in regular menu."""
+    import os
+    struct_path = os.path.join(BASE_DIR, "combo_structures.json")
+    if not os.path.exists(struct_path):
+        return []
+    with open(struct_path, "r", encoding="utf-8") as f:
+        struct = json.load(f)
+
+    all_did_names = {}
+    for section_key in ("coupons", "combos"):
+        section = struct.get(section_key, {})
+        if not isinstance(section, dict):
+            continue
+        for entry in section.values():
+            for slot in entry.get("slots", []):
+                for d in slot.get("dishes", []):
+                    did = d.get("dish_id")
+                    if did and did not in all_did_names:
+                        all_did_names[did] = d.get("name") or d.get("menu_name")
+                for opt in slot.get("options", []):
+                    did = opt.get("dish_id")
+                    if did and did not in all_did_names:
+                        all_did_names[did] = opt.get("name") or opt.get("menu_name")
+    return all_did_names
+
+
+_NON_FOOD_KEYWORDS = [
+    "салфетк", "перчатки", "сумка", "игрушк", "конструктор",
+    "брелок", "носки", "фигурк", "шопер",
+]
+
+
+def _is_non_food(name):
+    nl = name.lower()
+    return any(k in nl for k in _NON_FOOD_KEYWORDS)
+
+
+def _should_show_coupon_item(name):
+    if _is_non_food(name):
+        return False
+    # Hide limited-edition flavor variants that aren't standalone items
+    nl = name.lower()
+    if "жюльен" in nl:
+        return False
+    if "лобстер" in nl and "соус" not in nl:
+        return False
+    if "конструктор" in nl:
+        return False
+    return True
+
+
 @app.route("/menu", methods=["GET"])
 def get_menu():
     restaurant_id = str(request.args.get("store", "1002"))
@@ -516,6 +577,7 @@ def get_menu():
         menu, _, _ = load_data(rid=restaurant_id, mode="auto")
         groups_map = _build_group_map(menu)
 
+        menu_dish_ids = set()
         items = []
         for d in menu.get("dishes", []):
             mi = d["main_info"]
@@ -524,12 +586,36 @@ def get_menu():
             did = mi["id"]
 
             if price > 0 and not mi.get("restricted", False):
+                menu_dish_ids.add(did)
+                grps = groups_map.get(did, [])
+                if not grps and tag_sauce(name):
+                    grps = ["Соусы"]
                 items.append({
                     "name": name,
                     "price_kopecks": price,
-                    "groups": groups_map.get(did, []),
+                    "groups": grps,
                     "card_type": mi.get("card_type", "standard"),
                 })
+
+        # Add coupon-only items
+        coupon_items = _load_coupon_only_items()
+        seen_coupon_names = set()
+        for did, cname in sorted(coupon_items.items(), key=lambda x: x[1]):
+            if did in menu_dish_ids:
+                continue
+            if not _should_show_coupon_item(cname):
+                continue
+            name_key = cname.lower().strip()
+            if name_key in seen_coupon_names:
+                continue
+            seen_coupon_names.add(name_key)
+            items.append({
+                "name": cname,
+                "price_kopecks": 0,
+                "groups": [],
+                "card_type": "coupon_only",
+                "coupon_only": True,
+            })
 
         items.sort(key=lambda x: x["name"])
         return jsonify(items)
