@@ -168,6 +168,7 @@ tailwind.config = {
       </div>
       <h2 class="font-nunito font-black text-espresso text-base">Корзина</h2>
       <span id="cartCount" class="ml-auto bg-amber text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span>
+      <button onclick="clearCart()" class="text-[10px] font-bold text-espresso/25 hover:text-red-400 transition-colors ml-1" aria-label="Очистить корзину"><i class="fas fa-trash-can"></i></button>
     </div>
     <div id="cartItems" class="space-y-2"></div>
     <div class="mt-4 flex items-center justify-between bg-espresso/5 rounded-2xl px-4 py-3">
@@ -590,6 +591,13 @@ function btnCartChange(el) {
 
 function btnCartRemove(el) {
   cartRemove(dec(el.dataset.name));
+}
+
+function clearCart() {
+  cart = {};
+  updateCart();
+  renderMenu();
+  saveState();
 }
 
 function cartChange(name, delta) {
