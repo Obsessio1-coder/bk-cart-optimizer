@@ -569,6 +569,68 @@ def _should_show_coupon_item(name):
     return True
 
 
+def _categorize_coupon_item(name):
+    """Assign relevant groups (categories) to a coupon-only item based on its name."""
+    nl = name.lower()
+    groups = ["Только в комбо"]
+
+    # Cola variants
+    if "эвервесс кола вишня" in nl:
+        groups.append("Эвервесс Кола Вишня")
+    elif "эвервесс кола б/с" in nl or "эвервесс кола без сахара" in nl:
+        groups.append("Эвервесс Кола без сахара")
+    elif "эвервесс кола" in nl:
+        groups.append("Эвервесс Кола")
+
+    # Other drinks
+    if "фрустайл апельсин" in nl:
+        groups.append("Фрустайл Апельсин")
+    elif "фрустайл лимон" in nl:
+        groups.append("Фрустайл Лимон Лайм")
+    if "липтон лимон" in nl and "грин" not in nl and "зелен" not in nl:
+        groups.append("Липтон")
+    if "липтон грин" in nl or "липтон зелен" in nl:
+        groups.append("Липтон Грин")
+    if "лимонад" in nl:
+        groups.append("Напитки")
+    if "кофе" in nl:
+        groups.append("Кофе")
+
+    # Nuggets & strips
+    if "наггетс" in nl:
+        groups.append("Наггетсы")
+    if "стрипс" in nl:
+        groups.append("Наггетсы и стрипсы")
+
+    # Fries & potato
+    if "кинг фри" in nl:
+        groups.append("Кинг Фри")
+    if "картофель деревенский" in nl:
+        groups.append("Картофель Деревенский")
+
+    # Burgers
+    if "воппер" in nl:
+        groups.append("Воппер")
+    if "чизбургер" in nl:
+        groups.append("Чизбургер")
+    if "чикенбургер" in nl:
+        groups.append("Чикенбургер")
+    if "гамбургер" in nl:
+        groups.append("Гамбургер")
+    if "фиш бургер" in nl:
+        groups.append("Фиш Бургер")
+
+    # Snacks
+    if any(k in nl for k in ("креветк", "крылышк", "луковые кольца", "кинг букет", "кинг гоу")):
+        groups.append("Закуски")
+
+    # Desserts
+    if any(k in nl for k in ("милкшейк", "сандэй", "рожок", "брауни", "маффин", "мороженое")):
+        groups.append("Десерты")
+
+    return groups
+
+
 @app.route("/menu", methods=["GET"])
 def get_menu():
     restaurant_id = str(request.args.get("store", "1002"))
@@ -612,7 +674,7 @@ def get_menu():
             items.append({
                 "name": cname,
                 "price_kopecks": 0,
-                "groups": [],
+                "groups": _categorize_coupon_item(cname),
                 "card_type": "coupon_only",
                 "coupon_only": True,
             })

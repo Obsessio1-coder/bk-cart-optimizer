@@ -306,7 +306,7 @@ function buildCategoryMap() {
       map[cat].push(item);
     }
   }
-  const order = ['Бургеры', 'Вопперы', 'Наггетсы и стрипсы', 'Картофель и гарниры', 'Напитки', 'Десерты', 'Соусы', 'Остальное'];
+  const order = ['Остальное', 'Соусы', 'Бургеры', 'Вопперы', 'Наггетсы и стрипсы', 'Картофель и гарниры', 'Напитки', 'Десерты', 'Только в комбо'];
   const sorted = {};
   for (const key of order) {
     if (map[key]) { sorted[key] = map[key]; delete map[key]; }
