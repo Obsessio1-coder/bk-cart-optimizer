@@ -211,24 +211,24 @@ def test_multi_slot_sauce_coupon():
     bc = best_state[4]
     check("best_total < menu_total", best_total < menu_total, f"{best_total} < {menu_total}")
     check("has_multi_slot_savings", best_total > 0, str(best_total))
-    # 2 sauces @ 99.99 via multi-slot + Чикенбургер @ 99.99 mono + Кола @ 99.99 mono = 299.97
-    check("total ~ 299.97", abs(best_total - 299.97) < 0.01, str(best_total))
+    # 2 sauces via multi-slot (per-dish prices from struct) + Чикенбургер @ 99.99 mono + Кола @ 99.99 mono
+    check("total ~ 309.94", abs(best_total - 309.94) < 0.01, str(best_total))
 
 def test_multi_slot_3_sauces():
     r = optimize(["Соус Чесночный", "Соус Чесночный", "Соус Чесночный", "Кола"], restaurant_id="1002", mode="offline")
     check("multi-slot 3 returns tuple", len(r) == 9)
     best_total, _, best_state, menu_total, _, _, _, _, _ = r
     check("best_total < menu_total", best_total < menu_total, f"{best_total} < {menu_total}")
-    # 3 sauces @ 119.99 via 3-slot coupon + Кола @ 99.99 mono = 219.98
-    check("total ~ 219.98", abs(best_total - 219.98) < 0.01, str(best_total))
+    # 3 sauces via 3-slot multi-coupon (per-dish prices from struct) + Кола @ 99.99 mono
+    check("total ~ 234.93", abs(best_total - 234.93) < 0.01, str(best_total))
 
 def test_multi_slot_excess_4_sauces():
     r = optimize(["Соус Чесночный", "Соус Чесночный", "Соус Чесночный", "Соус Чесночный"], restaurant_id="1002", mode="offline")
     check("multi-slot 4 returns tuple", len(r) == 9)
     best_total, _, _, menu_total, _, _, _, _, _ = r
     check("best_total < menu_total", best_total < menu_total, f"{best_total} < {menu_total}")
-    # 3-slot coupon @ 119.99 + 1 remaining sauce @ 59.99 = 179.98
-    check("total ~ 179.98", abs(best_total - 179.98) < 0.01, str(best_total))
+    # 3-slot multi-coupon (per-dish prices from struct) + 1 remaining sauce @ 59.99
+    check("total ~ 194.93", abs(best_total - 194.93) < 0.01, str(best_total))
 
 def test_multi_slot_mixed():
     r = optimize(["Соус Чесночный", "Соус Чесночный", "Воппер", "Кола"], restaurant_id="1002", mode="offline")
