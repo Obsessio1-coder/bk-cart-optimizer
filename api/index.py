@@ -680,12 +680,14 @@ def get_menu():
         groups_map = _build_group_map(menu)
 
         menu_dish_ids = set()
+        menu_by_id = {}
         items = []
         for d in menu.get("dishes", []):
             mi = d["main_info"]
             price = mi["price"]
             name = mi["name"].strip()
             did = mi["id"]
+            menu_by_id[did] = mi
 
             if price > 0 and not mi.get("restricted", False):
                 menu_dish_ids.add(did)
@@ -702,15 +704,24 @@ def get_menu():
         # Add items from combo structures (not in regular menu)
         coupon_did_names, combo_only_did_names, coupon_code_by_did = _load_struct_items()
         seen_added_names = set()
+        # Prevent struct items with same name from overriding regular items
+        for item in items:
+            seen_added_names.add(item["name"].lower().strip())
 
         # Build set of coupon codes that exist at this restaurant
         restaurant_coupon_codes = set()
+        # Build set of dish_ids directly referenced in restaurant coupons (mono-coupons)
+        restaurant_coupon_dish_ids = set()
         for c in menu.get("general_coupons", []):
             code = c.get("code", "")
             if code:
                 restaurant_coupon_codes.add(str(code))
+            cid = c.get("dish_id")
+            if cid:
+                restaurant_coupon_dish_ids.add(cid)
 
-        # Items from coupons -> "только в купонах" (if parent coupon exists at this restaurant)
+        # Items from coupons -> "только в купонах" (if parent coupon exists at this restaurant
+        # AND the dish actually exists in the restaurant's menu by dish_id)
         for did, cname in sorted(coupon_did_names.items(), key=lambda x: x[1]):
             if did in menu_dish_ids:
                 continue
@@ -721,7 +732,18 @@ def get_menu():
                 continue
             seen_added_names.add(name_key)
             parent_coupons = coupon_code_by_did.get(did, set())
-            is_available = bool(parent_coupons & restaurant_coupon_codes)
+            has_parent_coupon = bool(parent_coupons & restaurant_coupon_codes)
+            # Item exists in the restaurant menu in ANY state
+            in_menu = did in menu_by_id
+            # Item is genuinely available (not restricted, not out-of-stock)
+            actually_available = in_menu and menu_by_id[did].get("price", 0) > 0 and not menu_by_id[did].get("restricted", False)
+            if actually_available:
+                # Should have been added as a regular item and skipped above
+                continue
+            # For items not in the restaurant menu at all, trust the struct
+            # For items in the menu but restricted/price=0, treat as unavailable
+            dish_available = not in_menu
+            is_available = has_parent_coupon and dish_available
             items.append({
                 "name": cname,
                 "price_kopecks": 0,
@@ -731,7 +753,8 @@ def get_menu():
                 "absent": False if is_available else True,
             })
 
-        # Items only in combo structures (not in menu, not in coupons) -> absent
+        # Items only in combo structures (not in menu, not in struct coupons)
+        # Check if available via direct mono-coupon in general_coupons
         for did, cname in sorted(combo_only_did_names.items(), key=lambda x: x[1]):
             if did in menu_dish_ids:
                 continue
@@ -741,12 +764,14 @@ def get_menu():
             if name_key in seen_added_names:
                 continue
             seen_added_names.add(name_key)
+            is_available_via_coupon = did in restaurant_coupon_dish_ids
             items.append({
                 "name": cname,
                 "price_kopecks": 0,
                 "groups": _categorize_coupon_item(cname),
-                "card_type": "absent",
-                "absent": True,
+                "card_type": "coupon_only" if is_available_via_coupon else "absent",
+                "absent": not is_available_via_coupon,
+                "coupon_only": True if is_available_via_coupon else False,
             })
 
         items.sort(key=lambda x: x["name"])
