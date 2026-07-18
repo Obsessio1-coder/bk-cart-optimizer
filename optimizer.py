@@ -677,6 +677,38 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
     if initial_total < best_total:
         best_total = initial_total
 
+    # ── Multi-first path: try diverse multi-coupons before mono ──
+    for dc in diverse_multi_coupons:
+        dc_remaining = order.copy()
+        dc_added, dc_used = _apply_diverse_multi_mono(dc_remaining, [dc], dish_idx)
+        if not dc_used:
+            continue
+        dc_mono_items = {}
+        for item_name in list(dc_remaining.keys()):
+            if dc_remaining[item_name] > 0 and item_name in mono_plan:
+                cnt = dc_remaining[item_name]
+                dc_mono_items[item_name] = cnt
+                dc_remaining[item_name] = 0
+        dc_mono_added, dc_multi_used = _apply_multi_mono(dc_remaining, multi_mono_coupons, dish_idx)
+        dc_total = sum(m["price"] for m in dc_used)
+        if dc_mono_items:
+            dc_total += sum(mono_plan[i][1] * c for i, c in dc_mono_items.items())
+        dc_total += dc_mono_added
+        for item_name, cnt in dc_remaining.items():
+            if cnt > 0:
+                dc_total += effective_prices.get(item_name.lower(), 0) * cnt
+        if dc_total < best_total:
+            best_total = dc_total
+            dc_leftover = {k: v for k, v in dc_remaining.items() if v > 0}
+            best_state = (dc_mono_items, [], dc_remaining, [], {
+                "total": dc_total,
+                "with_sauce": dc_total,
+                "without_sauce": dc_total,
+                "saving_tip": "",
+                "leftover": dc_leftover,
+                "multi_used": dc_used + dc_multi_used,
+            })
+
     for r in range(min(len(relevant), 3)):
         for subset in combinations(relevant, r + 1):
             remaining = Counter(order)

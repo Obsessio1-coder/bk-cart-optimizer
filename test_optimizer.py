@@ -40,7 +40,9 @@ def test_all_combo_items():
     check("combo items returns tuple", len(r) == 9)
     best_total, savings, best_state, _, _, _, _, _, _ = r
     mono_used_items, best_combo, final_remaining, detail_combos, best_costs = best_state
-    check("uses combo (not mono)", best_combo is not False and len(best_combo) > 0, str(best_combo))
+    has_combo = best_combo is not False and len(best_combo) > 0
+    has_multi = len(best_costs.get("multi_used", [])) > 0
+    check("uses combo or multi", has_combo or has_multi, f"combo={best_combo} multi={best_costs.get('multi_used')}")
     check("no remaining", all(v <= 0 for v in final_remaining.values()), str(final_remaining))
     check("savings > 0", savings > 0, str(savings))
 
