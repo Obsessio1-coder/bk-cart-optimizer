@@ -740,22 +740,51 @@ def get_menu():
             name_key = cname.lower().strip()
             if name_key in seen_added_names:
                 continue
-            # If the struct item is a size variant of a regular menu item (same base name),
-            # skip it — the regular item already covers it
-            if _strip_size(cname) in regular_normalized:
-                continue
             seen_added_names.add(name_key)
+
+            # Determine if this is a potato/fries item or a size variant of a regular item
+            is_potato = "фри" in name_key or "деревенск" in name_key
+            is_size_match = _strip_size(cname) in regular_normalized
+
+            # Check if the item exists in the restaurant menu (any state)
+            in_menu = did in menu_by_id
+            is_out_of_stock = in_menu and (menu_by_id[did].get("price", 0) <= 0 or menu_by_id[did].get("restricted", False))
+
+            # If out of stock (restricted or price=0), mark as absent regardless
+            if is_out_of_stock:
+                items.append({
+                    "name": cname,
+                    "price_kopecks": 0,
+                    "groups": _categorize_coupon_item(cname),
+                    "card_type": "absent",
+                    "absent": True,
+                })
+                continue
+
+            # Potato items (fries/деревенский) and size variants of regular items
+            # should show as regular menu items with a price
+            if is_potato or is_size_match:
+                # Find the cheapest matching regular item price
+                base = _strip_size(cname)
+                min_price = None
+                for reg_item in items:
+                    if _strip_size(reg_item["name"]) == base:
+                        p = reg_item.get("price_kopecks")
+                        if p is not None and (min_price is None or p < min_price):
+                            min_price = p
+                display_price = min_price if min_price is not None else 0
+                items.append({
+                    "name": cname,
+                    "price_kopecks": display_price,
+                    "groups": _categorize_coupon_item(cname),
+                    "card_type": "standard",
+                })
+                continue
+
             parent_coupons = coupon_code_by_did.get(did, set())
             has_parent_coupon = bool(parent_coupons & restaurant_coupon_codes)
-            # Item exists in the restaurant menu in ANY state
-            in_menu = did in menu_by_id
-            # Item is genuinely available (not restricted, not out-of-stock)
-            actually_available = in_menu and menu_by_id[did].get("price", 0) > 0 and not menu_by_id[did].get("restricted", False)
-            if actually_available:
-                # Should have been added as a regular item and skipped above
-                continue
             # For items not in the restaurant menu at all, trust the struct
-            # For items in the menu but restricted/price=0, treat as unavailable
+            # For items in the menu but restricted/price=0, treat as unavailable (handled above)
             dish_available = not in_menu
             is_available = has_parent_coupon and dish_available
             items.append({
@@ -769,6 +798,12 @@ def get_menu():
 
         # Items only in combo structures (not in menu, not in struct coupons)
         # Check if available via direct mono-coupon in general_coupons
+        # Also check if a related variant (e.g. Креветки 9 шт) exists as a coupon item
+        # Build set of dish_ids that are available in struct coupons at this restaurant
+        coupon_dish_ids_at_restaurant = set()
+        for cid, ccodes in coupon_code_by_did.items():
+            if ccodes & restaurant_coupon_codes:
+                coupon_dish_ids_at_restaurant.add(cid)
         for did, cname in sorted(combo_only_did_names.items(), key=lambda x: x[1]):
             if did in menu_dish_ids:
                 continue
@@ -778,7 +813,11 @@ def get_menu():
             if name_key in seen_added_names:
                 continue
             seen_added_names.add(name_key)
-            is_available_via_coupon = did in restaurant_coupon_dish_ids
+            # Force Креветки 9 шт (did=110) to coupon_only if other shrimp sizes are available via coupons
+            if did == 110:
+                is_available_via_coupon = bool(coupon_dish_ids_at_restaurant)
+            else:
+                is_available_via_coupon = did in restaurant_coupon_dish_ids
             items.append({
                 "name": cname,
                 "price_kopecks": 0,

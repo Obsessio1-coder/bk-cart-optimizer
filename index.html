@@ -370,7 +370,7 @@ function renderItemCard(item) {
       '</div>' +
       '<div class="min-w-0">' +
         '<p class="font-extrabold text-espresso text-xs leading-tight' + (isAbsent ? ' line-through' : '') + '">' + escHtml(item.name) + '</p>' +
-        '<p class="text-[10px] text-red-400/70 font-bold mt-0.5">' + statusText + '</p>' +
+        '<p class="text-[10px] text-espresso/40 font-bold mt-0.5">' + statusText + '</p>' +
       '</div>' +
     '</div>' +
     '<div class="flex items-center justify-between bg-cream rounded-2xl p-1">' +
@@ -451,7 +451,7 @@ function onSearchInput(val) {
       (absent ? '' : ' onmousedown="pickSearchItem(this)"') +
       ' style="' + (absent ? 'opacity:0.4;cursor:default;' : '') + '">' +
       '<span class="text-xs font-bold text-espresso flex-1 truncate' + (absent ? ' line-through' : '') + '">' + highlightMatch(item.name, val) + '</span>' +
-      '<span class="text-[9px] font-bold ' + (absent ? 'text-red-400/70' : 'text-espresso/25') + '">' + (absent ? 'отсутствует' : (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks))) + '</span>' +
+      '<span class="text-[9px] font-bold ' + (absent ? 'text-espresso/40' : 'text-espresso/25') + '">' + (absent ? 'отсутствует' : (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks))) + '</span>' +
     '</div>';
   }).join('');
   dd.classList.remove('hidden');
