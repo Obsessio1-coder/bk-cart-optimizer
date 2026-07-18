@@ -296,8 +296,8 @@ def generate_alternative_carts(order_dict, dish_idx):
 def _apply_multi_mono(remaining, multi_mono_coupons, dish_idx):
     """Применяет мульти-слот купоны с одинаковыми слотами к остатку remaining (in-place).
 
-    Цена каждого выбранного блюда берётся из dish_price_map купона (цены слотов),
-    а не плоская цена купона. Это корректно учитывает дельту премиум-блюд.
+    Цена каждого слота берётся из slot_price_maps купона, а не плоская цена купона.
+    Это корректно учитывает разницу цен в разных слотах.
 
     Возвращает (added_cost_rub, multi_used), где multi_used — список
     [{"name": ..., "items": {item_name: count}, "price": ...}, ...].
@@ -306,7 +306,7 @@ def _apply_multi_mono(remaining, multi_mono_coupons, dish_idx):
     multi_used = []
     for mc in multi_mono_coupons:
         needed = mc["slots_count"]
-        dish_price_map = mc.get("dish_price_map", {})
+        slot_price_maps = mc.get("slot_price_maps", [])
         avail = []
         for item_name in list(remaining.keys()):
             cnt = remaining[item_name]
@@ -324,8 +324,8 @@ def _apply_multi_mono(remaining, multi_mono_coupons, dish_idx):
                 if remaining[nm] == 0:
                     del remaining[nm]
                 e = dish_idx.get(nm.lower())
-                if e and e["id"] in dish_price_map:
-                    total_price_kop += dish_price_map[e["id"]]
+                if e and i < len(slot_price_maps) and e["id"] in slot_price_maps[i]:
+                    total_price_kop += slot_price_maps[i][e["id"]]
                 else:
                     total_price_kop += mc["price_kopecks"] // needed
             price_rub = total_price_kop / 100
@@ -461,20 +461,22 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
             common = common & s_set
         if not common:
             continue
-        dish_price_map = {}
+        slot_price_maps = []
         for s in slots:
+            pm = {}
             for d in s.get("dishes", []):
                 did = d.get("dish_id")
                 p = d.get("price", 0)
-                if did and p > 0 and (did not in dish_price_map or p < dish_price_map[did]):
-                    dish_price_map[did] = p
+                if did and p > 0:
+                    pm[did] = p
+            slot_price_maps.append(pm)
 
         multi_mono_coupons.append({
             "name": mi["name"],
             "price_kopecks": mi["price"],
             "slots_count": len(slots),
             "common_ids": common,
-            "dish_price_map": dish_price_map,
+            "slot_price_maps": slot_price_maps,
         })
     multi_mono_coupons.sort(key=lambda x: (-x["slots_count"], x["price_kopecks"]))
 
