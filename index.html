@@ -444,11 +444,14 @@ function onSearchInput(val) {
   });
   dd.innerHTML = matches.slice(0, 12).map(function(item, i) {
     var nameSafe = item.name.replace(/"/g, '&quot;');
-    return '<div class="px-4 py-2.5 flex items-center gap-2.5 hover:bg-cream active:bg-cream/80 cursor-pointer transition-colors"' +
+    var absent = item.absent;
+    return '<div class="px-4 py-2.5 flex items-center gap-2.5 transition-colors' +
+      (absent ? '' : ' hover:bg-cream active:bg-cream/80 cursor-pointer') + '"' +
       ' data-name="' + nameSafe + '" data-idx="' + i + '"' +
-      ' onmousedown="pickSearchItem(this)">' +
-      '<span class="text-xs font-bold text-espresso flex-1 truncate">' + highlightMatch(item.name, val) + '</span>' +
-      '<span class="text-[9px] font-bold ' + (item.absent ? 'text-red-400/70' : 'text-espresso/25') + '">' + (item.absent ? 'отсутствует на данный момент' : (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks))) + '</span>' +
+      (absent ? '' : ' onmousedown="pickSearchItem(this)"') +
+      ' style="' + (absent ? 'opacity:0.4;cursor:default;' : '') + '">' +
+      '<span class="text-xs font-bold text-espresso flex-1 truncate' + (absent ? ' line-through' : '') + '">' + highlightMatch(item.name, val) + '</span>' +
+      '<span class="text-[9px] font-bold ' + (absent ? 'text-red-400/70' : 'text-espresso/25') + '">' + (absent ? 'отсутствует' : (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks))) + '</span>' +
     '</div>';
   }).join('');
   dd.classList.remove('hidden');
@@ -464,6 +467,11 @@ function pickSearchItem(el) {
   var name = el.dataset.name;
   document.getElementById('searchInput').value = name;
   document.getElementById('searchDropdown').classList.add('hidden');
+  var item = menuByName[name.toLowerCase()];
+  if (item && item.absent) {
+    showToast('Это блюдо отсутствует в данном ресторане', 'warn');
+    return;
+  }
   cart[name] = (cart[name] || 0) + 1;
   updateCart();
   saveState();
@@ -497,8 +505,13 @@ function addSearchItem() {
   var dropdown = document.getElementById('searchDropdown');
   dropdown.classList.add('hidden');
   var name = input.value.trim();
-  if (!name || !menuByName[name.toLowerCase()]) {
+  var item = menuByName[name.toLowerCase()];
+  if (!item) {
     showToast('Блюдо не найдено в меню этого ресторана', 'warn');
+    return;
+  }
+  if (item.absent) {
+    showToast('Это блюдо отсутствует в данном ресторане', 'warn');
     return;
   }
   cart[name] = (cart[name] || 0) + 1;
