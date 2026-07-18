@@ -294,7 +294,7 @@ def generate_alternative_carts(order_dict, dish_idx):
     return alternatives
 
 def _apply_multi_mono(remaining, multi_mono_coupons, dish_idx):
-    """Применяет мульти-слот купоны к остатку remaining (in-place).
+    """Применяет мульти-слот купоны с одинаковыми слотами к остатку remaining (in-place).
 
     Возвращает (added_cost_rub, multi_used), где multi_used — список
     [{"name": ..., "items": {item_name: count}, "price": ...}, ...].
@@ -323,6 +323,54 @@ def _apply_multi_mono(remaining, multi_mono_coupons, dish_idx):
             multi_used.append({
                 "name": mc["name"],
                 "items": used_items,
+                "price": price_rub,
+            })
+    return added, multi_used
+
+
+def _apply_diverse_multi_mono(remaining, diverse_coupons, dish_idx):
+    """Применяет мульти-слот купоны с РАЗНЫМИ типами слотов (напр. бургер+гарнир+соус).
+
+    Каждый слот имеет свой набор dish_ids.
+    Нужно подобрать по одному товару из остатка на каждый слот.
+
+    Возвращает (added_cost_rub, multi_used).
+    """
+    added = 0.0
+    multi_used = []
+    for dc in diverse_coupons:
+        slot_sets = dc["slot_ids"]
+        n_slots = len(slot_sets)
+        assignment = [None] * n_slots
+        used_items = {}
+
+        avail_items = []
+        for item_name in list(remaining.keys()):
+            cnt = remaining[item_name]
+            if cnt > 0:
+                e = dish_idx.get(item_name.lower())
+                if e:
+                    avail_items.extend([(item_name, e["id"])] * cnt)
+
+        for slot_i, s_set in enumerate(slot_sets):
+            for idx, (nm, nid) in enumerate(avail_items):
+                if nm in used_items:
+                    continue
+                if nid in s_set:
+                    assignment[slot_i] = nm
+                    used_items[nm] = used_items.get(nm, 0) + 1
+                    break
+
+        if all(a is not None for a in assignment):
+            for nm, cnt in used_items.items():
+                remaining[nm] -= cnt
+                if remaining[nm] == 0:
+                    del remaining[nm]
+            price_rub = dc["price_kopecks"] / 100
+            added += price_rub
+            multi_used.append({
+                "name": dc["name"],
+                "items": dict(used_items),
                 "price": price_rub,
             })
     return added, multi_used
@@ -401,6 +449,36 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
             "common_ids": common,
         })
     multi_mono_coupons.sort(key=lambda x: (-x["slots_count"], x["price_kopecks"]))
+
+    # ── Разнотипные мульти-слот купоны (разные типы блюд в слотах) ──
+    diverse_multi_coupons = []
+    for entry in menu.get("general_coupons", []):
+        ok, reason = validate_coupon_visibility(entry, coupon_ctx)
+        if not ok:
+            continue
+        mi = entry["main_info"]
+        coupon_id = mi["id"]
+        code = entry.get("code", "")
+        if coupon_id not in menu_id_set and code not in menu_id_set:
+            continue
+        struct_entry = struct["coupons"].get(code) or struct["combos"].get(str(mi["id"]))
+        if not struct_entry:
+            continue
+        slots = struct_entry.get("slots", [])
+        if len(slots) < 2:
+            continue
+        dish_id_sets = [set(d.get("dish_id") for d in s.get("dishes", []) if d.get("dish_id")) for s in slots]
+        common = dish_id_sets[0]
+        for s_set in dish_id_sets[1:]:
+            common = common & s_set
+        if common:
+            continue  # already handled by multi_mono_coupons
+        diverse_multi_coupons.append({
+            "name": mi["name"],
+            "price_kopecks": mi["price"],
+            "slot_ids": dish_id_sets,
+        })
+    diverse_multi_coupons.sort(key=lambda x: x["price_kopecks"])
 
     for item_name in list(order.keys()):
         e = dish_idx.get(item_name.lower())
@@ -540,6 +618,9 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
             mono_items_used[item_name] = order[item_name]
     remaining_multi = Counter({k: v for k, v in remaining_mono.items() if v > 0})
     multi_added, multi_used_initial = _apply_multi_mono(remaining_multi, multi_mono_coupons, dish_idx)
+    diverse_added, diverse_used = _apply_diverse_multi_mono(remaining_multi, diverse_multi_coupons, dish_idx)
+    multi_added += diverse_added
+    multi_used_initial.extend(diverse_used)
     initial_total = sum(mono_plan[i][1] * cnt for i, cnt in mono_items_used.items()) if mono_items_used else 0.0
     initial_total += multi_added
     for item_name, cnt in remaining_multi.items():
@@ -633,6 +714,9 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
 
             # Сначала мульти-слот купоны (напр. 2 соуса за 99,99)
             multi_added, multi_used = _apply_multi_mono(remaining, multi_mono_coupons, dish_idx)
+            div_added, div_used = _apply_diverse_multi_mono(remaining, diverse_multi_coupons, dish_idx)
+            multi_added += div_added
+            multi_used.extend(div_used)
             total_rem += multi_added
 
             # Потом однослотовые моно-купон и остаток

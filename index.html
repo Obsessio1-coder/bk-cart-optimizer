@@ -360,22 +360,25 @@ function renderMenu() {
 function renderItemCard(item) {
   var count = cart[item.name] || 0;
   var e = enc(item.name);
-  return '<div class="bg-white rounded-3xl p-3.5 shadow-sm border border-espresso/5 transition-all hover:shadow-md active:scale-[0.98]">' +
+  var isAbsent = item.absent;
+  var statusText = isAbsent ? 'отсутствует на данный момент' : (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks));
+  var cardClass = isAbsent ? 'bg-white/60 rounded-3xl p-3.5 shadow-sm border border-espresso/5 opacity-50' : 'bg-white rounded-3xl p-3.5 shadow-sm border border-espresso/5 transition-all hover:shadow-md active:scale-[0.98]';
+  return '<div class="' + cardClass + '">' +
     '<div class="flex items-start gap-2.5 mb-3">' +
       '<div class="w-9 h-9 bg-cream rounded-2xl flex items-center justify-center flex-shrink-0">' +
         '<i class="fas ' + getItemIcon(item) + ' text-espresso/30 text-sm"></i>' +
       '</div>' +
       '<div class="min-w-0">' +
-        '<p class="font-extrabold text-espresso text-xs leading-tight">' + escHtml(item.name) + '</p>' +
-        '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks)) + '</p>' +
+        '<p class="font-extrabold text-espresso text-xs leading-tight' + (isAbsent ? ' line-through' : '') + '">' + escHtml(item.name) + '</p>' +
+        '<p class="text-[10px] text-red-400/70 font-bold mt-0.5">' + statusText + '</p>' +
       '</div>' +
     '</div>' +
     '<div class="flex items-center justify-between bg-cream rounded-2xl p-1">' +
-      '<button data-name="' + e + '" data-delta="-1" onclick="btnChange(this)" class="w-8 h-8 rounded-xl flex items-center justify-center text-espresso/40 hover:bg-white hover:text-espresso transition-all active:scale-90 ' + (count === 0 ? 'opacity-30' : '') + '">' +
+      '<button data-name="' + e + '" data-delta="-1" onclick="btnChange(this)" class="w-8 h-8 rounded-xl flex items-center justify-center text-espresso/40 hover:bg-white hover:text-espresso transition-all active:scale-90 ' + (count === 0 ? 'opacity-30' : '') + '"' + (isAbsent ? ' disabled style="opacity:0.2;cursor:not-allowed"' : '') + '>' +
         '<i class="fas fa-minus text-[10px]"></i>' +
       '</button>' +
       '<span class="font-black text-espresso text-sm w-6 text-center">' + count + '</span>' +
-      '<button data-name="' + e + '" data-delta="1" onclick="btnChange(this)" class="w-8 h-8 rounded-xl flex items-center justify-center bg-amber text-white hover:bg-amber-dark transition-all active:scale-90 shadow-sm shadow-amber/20">' +
+      '<button data-name="' + e + '" data-delta="1" onclick="btnChange(this)" class="w-8 h-8 rounded-xl flex items-center justify-center' + (isAbsent ? ' bg-gray-300 text-gray-500' : ' bg-amber text-white hover:bg-amber-dark') + ' transition-all active:scale-90 shadow-sm' + (isAbsent ? '' : ' shadow-amber/20') + '"' + (isAbsent ? ' disabled style="cursor:not-allowed"' : '') + '>' +
         '<i class="fas fa-plus text-[10px]"></i>' +
       '</button>' +
     '</div>' +
@@ -445,7 +448,7 @@ function onSearchInput(val) {
       ' data-name="' + nameSafe + '" data-idx="' + i + '"' +
       ' onmousedown="pickSearchItem(this)">' +
       '<span class="text-xs font-bold text-espresso flex-1 truncate">' + highlightMatch(item.name, val) + '</span>' +
-      '<span class="text-[9px] font-bold text-espresso/25">' + (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks)) + '</span>' +
+      '<span class="text-[9px] font-bold ' + (item.absent ? 'text-red-400/70' : 'text-espresso/25') + '">' + (item.absent ? 'отсутствует на данный момент' : (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks))) + '</span>' +
     '</div>';
   }).join('');
   dd.classList.remove('hidden');
@@ -560,7 +563,7 @@ function updateCart() {
     var item = menuByName[name.toLowerCase()];
     var priceKop = item ? item.price_kopecks * count : 0;
     sum += priceKop;
-    var priceStr = item ? (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks * count)) : '';
+    var priceStr = item ? (item.absent ? 'отсутствует' : (item.coupon_only ? 'только в купонах' : fmtPriceKop(item.price_kopecks * count))) : '';
     var e = enc(name);
     return '<div class="bg-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm border border-espresso/5 fade-in">' +
       '<div class="flex-1 min-w-0">' +

@@ -528,31 +528,55 @@ def get_restaurants():
         return jsonify({"error": str(e)}), 500
 
 
-def _load_coupon_only_items():
-    """Load items that exist in coupon/combos but not in regular menu."""
+def _load_struct_items():
+    """Load items from combo_structures, separated by source.
+
+    Returns:
+        coupon_did_names: dish_ids found in struct['coupons']
+        combo_only_did_names: dish_ids found ONLY in struct['combos'] (not in coupons)
+    """
     import os
     struct_path = os.path.join(BASE_DIR, "combo_structures.json")
     if not os.path.exists(struct_path):
-        return []
+        return {}, {}
     with open(struct_path, "r", encoding="utf-8") as f:
         struct = json.load(f)
 
     all_did_names = {}
-    for section_key in ("coupons", "combos"):
-        section = struct.get(section_key, {})
-        if not isinstance(section, dict):
-            continue
-        for entry in section.values():
-            for slot in entry.get("slots", []):
-                for d in slot.get("dishes", []):
-                    did = d.get("dish_id")
-                    if did and did not in all_did_names:
-                        all_did_names[did] = d.get("name") or d.get("menu_name")
-                for opt in slot.get("options", []):
-                    did = opt.get("dish_id")
-                    if did and did not in all_did_names:
-                        all_did_names[did] = opt.get("name") or opt.get("menu_name")
-    return all_did_names
+    coupon_did_names = {}
+
+    for entry in struct.get("coupons", {}).values():
+        for slot in entry.get("slots", []):
+            for d in slot.get("dishes", []):
+                did = d.get("dish_id")
+                if did:
+                    name = d.get("name") or d.get("menu_name")
+                    coupon_did_names[did] = name
+                    all_did_names[did] = name
+            for opt in slot.get("options", []):
+                did = opt.get("dish_id")
+                if did:
+                    name = opt.get("name") or opt.get("menu_name")
+                    coupon_did_names[did] = name
+                    all_did_names[did] = name
+
+    combo_only_did_names = {}
+    for entry in struct.get("combos", {}).values():
+        for slot in entry.get("slots", []):
+            for d in slot.get("dishes", []):
+                did = d.get("dish_id")
+                if did and did not in all_did_names:
+                    name = d.get("name") or d.get("menu_name")
+                    combo_only_did_names[did] = name
+                    all_did_names[did] = name
+            for opt in slot.get("options", []):
+                did = opt.get("dish_id")
+                if did and did not in all_did_names:
+                    name = opt.get("name") or opt.get("menu_name")
+                    combo_only_did_names[did] = name
+                    all_did_names[did] = name
+
+    return coupon_did_names, combo_only_did_names
 
 
 _NON_FOOD_KEYWORDS = [
@@ -670,24 +694,44 @@ def get_menu():
                     "card_type": mi.get("card_type", "standard"),
                 })
 
-        # Add coupon-only items
-        coupon_items = _load_coupon_only_items()
-        seen_coupon_names = set()
-        for did, cname in sorted(coupon_items.items(), key=lambda x: x[1]):
+        # Add items from combo structures (not in regular menu)
+        coupon_did_names, combo_only_did_names = _load_struct_items()
+        seen_added_names = set()
+
+        # Items from coupons -> "только в купонах"
+        for did, cname in sorted(coupon_did_names.items(), key=lambda x: x[1]):
             if did in menu_dish_ids:
                 continue
             if not _should_show_coupon_item(cname):
                 continue
             name_key = cname.lower().strip()
-            if name_key in seen_coupon_names:
+            if name_key in seen_added_names:
                 continue
-            seen_coupon_names.add(name_key)
+            seen_added_names.add(name_key)
             items.append({
                 "name": cname,
                 "price_kopecks": 0,
                 "groups": _categorize_coupon_item(cname),
                 "card_type": "coupon_only",
                 "coupon_only": True,
+            })
+
+        # Items only in combo structures (not in menu, not in coupons) -> absent
+        for did, cname in sorted(combo_only_did_names.items(), key=lambda x: x[1]):
+            if did in menu_dish_ids:
+                continue
+            if not _should_show_coupon_item(cname):
+                continue
+            name_key = cname.lower().strip()
+            if name_key in seen_added_names:
+                continue
+            seen_added_names.add(name_key)
+            items.append({
+                "name": cname,
+                "price_kopecks": 0,
+                "groups": _categorize_coupon_item(cname),
+                "card_type": "absent",
+                "absent": True,
             })
 
         items.sort(key=lambda x: x["name"])
