@@ -238,6 +238,8 @@ def _tag_portion(name):
             return "cola_medium"
         if "больш" in nl:
             return "cola_large"
+        if "0,4" in nl or "0.4" in nl:
+            return "cola_small"
         if "0,5" in nl or "0.5" in nl:
             return "cola_medium"
         if "0,8" in nl or "0.8" in nl:
@@ -263,6 +265,79 @@ def _find_smaller_in_class(item_name, dish_idx):
                 smaller.append((other_tag, other_size, info["name"]))
     smaller.sort(key=lambda x: x[1], reverse=True)
     return smaller
+
+
+def _find_bigger_in_class(item_name, dish_idx, level="one"):
+    """Find bigger variants of the same food class.
+    level="one": one step up (smallest bigger available)
+    level="max":  biggest possible
+    Returns list of (bigger_tag, bigger_size, bigger_name).
+    """
+    tag = _tag_portion(item_name)
+    if not tag or tag not in PORTION_SIZES:
+        return []
+    cls = _portion_class(tag)
+    if not cls:
+        return []
+    base_size = PORTION_SIZES[tag]
+    bigger = []
+    for name_lower, info in dish_idx.items():
+        if info.get("combo_only"):
+            continue
+        other_tag = _tag_portion(info["name"])
+        if other_tag and _portion_class(other_tag) == cls:
+            other_size = PORTION_SIZES.get(other_tag)
+            if other_size and other_size > base_size:
+                bigger.append((other_tag, other_size, info["name"]))
+    if not bigger:
+        return []
+    bigger.sort(key=lambda x: (x[1], x[2]))  # by size then name
+    if level == "one":
+        return [bigger[0]]
+    return [bigger[-1]]
+
+
+def _upgrade_order(order, dish_idx, level):
+    """Generate upgraded versions of an order.
+    level="one": yield single-item-upgraded orders (one per upgradable item).
+    level="max": yield one order with ALL items upgraded to max size.
+    Yields (Counter(upgraded_order), tip, changed_any).
+    """
+    if level == "max":
+        upgraded = Counter()
+        changes = []
+        for item_name, count in order.items():
+            found = _find_bigger_in_class(item_name, dish_idx, level="max")
+            if found:
+                _, _, bigger_name = found[0]
+                upgraded[bigger_name] += count
+                changes.append(f"{count}x {item_name} -> {bigger_name}")
+            else:
+                upgraded[item_name] += count
+        if changes:
+            tip = "Все позиции увеличены до максимума: " + "; ".join(changes)
+            yield (upgraded, tip, True)
+        return
+
+    # level="one" — upgrade one item at a time
+    seen = set()
+    for item_name, count in order.items():
+        if count <= 0:
+            continue
+        found = _find_bigger_in_class(item_name, dish_idx, level="one")
+        if not found:
+            continue
+        _, _, bigger_name = found[0]
+        key = (item_name, bigger_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        upgraded = Counter(order)
+        upgraded[item_name] = 0
+        upgraded[bigger_name] += count
+        upgraded = +upgraded
+        tip = f"{count}x «{item_name}» -> «{bigger_name}»"
+        yield (upgraded, tip, True)
 
 def generate_alternative_carts(order_dict, dish_idx):
     """Генерирует альтернативные корзины, заменяя порции на бОльшее
@@ -924,6 +999,77 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
 
     savings = indiv_total - best_total
 
+    # ── Tier 1: original order ──
+    tier1 = {
+        "name": "Стандартный",
+        "best_total": best_total,
+        "savings": savings,
+        "best_state": best_state,
+        "best_eff": best_eff,
+        "best_mono": best_mono,
+        "order": order,
+        "menu_prices": menu_prices,
+        "upgrade_tip": best_alt_tip,
+        "order_items": list(order.elements()),
+    }
+
+    # ── Tier 2: one-step upgrades ──
+    tier2 = None
+    for upg_order, tip, _ in _upgrade_order(order, dish_idx, level="one"):
+        upg_menu_prices = {}
+        for n in upg_order:
+            e = dish_idx.get(n.lower())
+            if e and e["price"] > 0 and not e.get("combo_only"):
+                upg_menu_prices[n.lower()] = e["price"]
+            elif n.lower() in coupon_only_added:
+                upg_menu_prices[n.lower()] = coupon_only_added[n.lower()][0]
+        upg_total, upg_state, upg_eff, upg_mono, _ = _optimize_cart(
+            upg_order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, upg_menu_prices,
+        )
+        if upg_total < indiv_total and upg_total > best_total:
+            if tier2 is None or upg_total < tier2["best_total"]:
+                tier2 = {
+                    "name": "Улучшенный",
+                    "best_total": upg_total,
+                    "savings": indiv_total - upg_total,
+                    "best_state": upg_state,
+                    "best_eff": upg_eff,
+                    "best_mono": upg_mono,
+                    "order": upg_order,
+                    "menu_prices": upg_menu_prices,
+                    "upgrade_tip": tip,
+                    "order_items": list(upg_order.elements()),
+                }
+
+    # ── Tier 3: max upgrades ──
+    tier3 = None
+    for upg_order, tip, _ in _upgrade_order(order, dish_idx, level="max"):
+        upg_menu_prices = {}
+        for n in upg_order:
+            e = dish_idx.get(n.lower())
+            if e and e["price"] > 0 and not e.get("combo_only"):
+                upg_menu_prices[n.lower()] = e["price"]
+            elif n.lower() in coupon_only_added:
+                upg_menu_prices[n.lower()] = coupon_only_added[n.lower()][0]
+        upg_total, upg_state, upg_eff, upg_mono, _ = _optimize_cart(
+            upg_order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, upg_menu_prices,
+        )
+        if upg_total > indiv_total:
+            # Also check that not all items are same as original
+            if upg_order != order:
+                tier3 = {
+                    "name": "Максимальный",
+                    "best_total": upg_total,
+                    "savings": indiv_total - upg_total,
+                    "best_state": upg_state,
+                    "best_eff": upg_eff,
+                    "best_mono": upg_mono,
+                    "order": upg_order,
+                    "menu_prices": upg_menu_prices,
+                    "upgrade_tip": tip,
+                    "order_items": list(upg_order.elements()),
+                }
+
     # ── вывод ──
     mono_used_items, best_combo, final_remaining, detail_combos, best_costs = best_state
 
@@ -935,14 +1081,14 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
     print("=" * 70)
 
     if best_alt_tip:
-        print(f"\n💡 {best_alt_tip}")
+        print(f"\n[Совет] {best_alt_tip}")
 
     if mono_used_items:
         mono_cost = sum(best_mono[i][1] * cnt for i, cnt in mono_used_items.items())
         print(f"\nМоно-купон ({mono_cost:.2f} руб):")
         for item, cnt in mono_used_items.items():
             cn, cp = best_mono[item]
-            print(f"  + {cn} → {item} x{cnt} @ {cp:.2f}")
+            print(f"  + {cn} -> {item} x{cnt} @ {cp:.2f}")
 
     multi_used = best_costs.get("multi_used", [])
     if multi_used:
@@ -985,56 +1131,22 @@ def optimize(wanted_list, restaurant_id="1002", mode="auto"):
     if savings > 0:
         print(f"ЭКОНОМИЯ: {savings:.2f} руб")
 
-    return best_total, savings, best_state, indiv_total, menu_prices, best_eff, best_mono, dish_idx, order
+    if tier2:
+        print(f"\n--- Улучшенный (Tier 2) ---")
+        print(f"  {tier2['upgrade_tip']}")
+        print(f"  Итого: {tier2['best_total']:.2f} руб (экономия {tier2['savings']:.2f} руб)")
 
-    # ── вывод ──
-    mono_used_items, best_combo, final_remaining, detail_combos, best_costs = best_state
+    if tier3:
+        print(f"\n--- Максимальный (Tier 3) ---")
+        print(f"  {tier3['upgrade_tip']}")
+        print(f"  Итого: {tier3['best_total']:.2f} руб (на {abs(tier3['savings']):.2f} руб дороже, но порции больше!)")
 
-    print("=" * 70)
-    print("ОПТИМАЛЬНЫЙ ПЛАН")
-    print("=" * 70)
-
-    if mono_used_items:
-        mono_cost = sum(mono_plan[i][1] * cnt for i, cnt in mono_used_items.items())
-        print(f"\nМоно-купон ({mono_cost:.2f} руб):")
-        for item, cnt in mono_used_items.items():
-            cn, cp = mono_plan[item]
-            print(f"  + {cn} → {item} x{cnt} @ {cp:.2f}")
-
-    if best_combo:
-        combo_total = best_costs["combo_total"]
-        print(f"\nКомбо ({combo_total:.2f} руб):")
-        for da in detail_combos:
-            print(f"  + {da['name']} @ {da['effective_price']:.2f}:")
-            for wanted, actual in da["items"]:
-                if wanted != actual:
-                    print(f"      {wanted} -> {actual}")
-                else:
-                    print(f"      {actual}")
-
-    if final_remaining:
-        leftover = {k: v for k, v in final_remaining.items() if v > 0}
-        if leftover:
-            extra_cost = sum(effective_prices.get(i.lower(), 0) * c for i, c in leftover.items())
-            print(f"\nОтдельно ({extra_cost:.2f} руб):")
-            for item, cnt in leftover.items():
-                p = effective_prices.get(item.lower(), 0)
-                if cnt > 0:
-                    print(f"  + {item} x{cnt} = {p*cnt:.2f}")
-
-    # ── Соусный сценарий ──
-    w_sauce = best_costs.get("with_sauce", best_total)
-    wo_sauce = best_costs.get("without_sauce", best_total)
-    if w_sauce != wo_sauce:
-        print(f"\n  Соусный слот: без соуса -> {wo_sauce:.2f} руб / с соусом -> {w_sauce:.2f} руб")
-
-    print(f"\nИТОГО: {best_total:.2f} руб")
-    if w_sauce != wo_sauce and w_sauce == best_total:
-        print(f"  (без соуса: {wo_sauce:.2f} руб)")
-    print(f"Без акций: {indiv_total:.2f} руб")
-    savings = indiv_total - best_total
-    if savings > 0:
-        print(f"ЭКОНОМИЯ: {savings:.2f} руб")
+    return {
+        "tiers": [tier1, tier2, tier3],
+        "original_menu_total": indiv_total,
+        "not_found": [],
+        "stats": {},
+    }
 
     return best_total, savings, best_state, indiv_total, menu_prices, effective_prices, mono_plan, dish_idx, order
 

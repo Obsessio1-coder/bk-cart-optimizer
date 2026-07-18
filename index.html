@@ -761,184 +761,250 @@ async function runOptimization() {
 function showResult(data) {
   var sheet = document.getElementById('resultSheet');
   var content = document.getElementById('resultContent');
-  var plan = data.plan || {};
-  var combos = plan.combos || [];
-  var monoCoupons = plan.mono_coupons || {};
-  var remaining = plan.remaining || {};
+  var tiers = data.tiers || [];
 
-  var html = '';
+  if (tiers.length === 0) { content.innerHTML = ''; sheet.classList.remove('hidden'); return; }
 
-  html += '<div class="flex items-center gap-4 mb-5 bg-white rounded-3xl p-5 shadow-sm border border-espresso/5">' +
-    '<div class="flex-1">' +
-      '<p class="text-xs font-bold text-espresso/30 uppercase tracking-wider mb-1">Обычная цена</p>' +
-      '<p class="font-black text-espresso/30 text-xl line-through decoration-2">' + fmtPrice(data.menu_total / 100) + '</p>' +
-    '</div>' +
-    '<div class="w-10 h-10 bg-cream rounded-2xl flex items-center justify-center">' +
-      '<i class="fas fa-arrow-right text-espresso/20"></i>' +
-    '</div>' +
-    '<div class="flex-1 text-right">' +
-      '<p class="text-xs font-bold text-sage uppercase tracking-wider mb-1">С выгодой</p>' +
-      '<p class="font-black text-sage text-2xl">' + fmtPrice(data.best_total / 100) + '</p>' +
-    '</div>' +
-  '</div>';
+  var tierColors = [
+    { name: 'Стандартный', accent: 'sage', accentHex: '#10B981', light: 'bg-sage/10', dot: 'bg-sage', badge: 'text-sage', btnActive: 'bg-sage text-white border-sage', order: 0 },
+    { name: 'Улучшенный', accent: 'blue', accentHex: '#3B82F6', light: 'bg-blue/10', dot: 'bg-blue', badge: 'text-blue-dark', btnActive: 'bg-blue text-white border-blue', order: 1 },
+    { name: 'Максимальный', accent: 'amber', accentHex: '#F59E0B', light: 'bg-amber/10', dot: 'bg-amber', badge: 'text-amber-dark', btnActive: 'bg-amber text-white border-amber', order: 2 },
+  ];
 
-  if (data.savings > 0) {
-    html += '<div class="bg-sage/10 border-2 border-sage/20 rounded-3xl px-5 py-4 mb-5 flex items-center gap-3 fade-in">' +
-      '<div class="w-10 h-10 bg-sage rounded-2xl flex items-center justify-center flex-shrink-0">' +
-        '<i class="fas fa-piggy-bank text-white text-sm"></i>' +
-      '</div>' +
-      '<div>' +
-        '<p class="text-xs font-bold text-sage-dark/60 uppercase tracking-wider">Вы экономите</p>' +
-        '<p class="font-black text-sage-dark text-xl">' + fmtPrice(data.savings / 100) + '</p>' +
-      '</div>' +
-    '</div>';
-  }
+  var activeTier = 0;
 
-  if (data.saving_tip) {
-    html += '<div class="bg-blue/10 border-2 border-blue/20 rounded-3xl px-5 py-4 mb-5 flex items-center gap-3 fade-in">' +
-      '<div class="w-10 h-10 bg-blue rounded-2xl flex items-center justify-center flex-shrink-0">' +
-        '<i class="fas fa-lightbulb text-white text-sm"></i>' +
-      '</div>' +
+  function renderTier(tierIndex) {
+    var tdata = tiers[tierIndex];
+    if (!tdata) return;
+    var plan = tdata.plan || {};
+    var combos = plan.combos || [];
+    var monoCoupons = plan.mono_coupons || {};
+    var remaining = plan.remaining || {};
+    var tc = tierColors[tierIndex];
+    var bgAccent = tc.light;
+    var badgeCls = tc.badge;
+
+    var html = '';
+
+    // Price comparison header
+    html += '<div class="flex items-center gap-4 mb-5 bg-white rounded-3xl p-5 shadow-sm border border-espresso/5">' +
       '<div class="flex-1">' +
-        '<p class="text-xs font-bold text-blue-dark/60 uppercase tracking-wider mb-0.5">Совет по замене</p>' +
-        '<p class="text-sm font-bold text-espresso leading-snug">' + escHtml(data.saving_tip) + '</p>' +
+        '<p class="text-xs font-bold text-espresso/30 uppercase tracking-wider mb-1">Обычная цена</p>' +
+        '<p class="font-black text-espresso/30 text-xl line-through decoration-2">' + fmtPrice(data.original_menu_total / 100) + '</p>' +
+      '</div>' +
+      '<div class="w-10 h-10 bg-cream rounded-2xl flex items-center justify-center">' +
+        '<i class="fas fa-arrow-right text-espresso/20"></i>' +
+      '</div>' +
+      '<div class="flex-1 text-right">' +
+        '<p class="text-xs font-bold uppercase tracking-wider mb-1" style="color:' + tc.accentHex + '">С выгодой</p>' +
+        '<p class="font-black text-2xl" style="color:' + tc.accentHex + '">' + fmtPrice(tdata.best_total / 100) + '</p>' +
       '</div>' +
     '</div>';
-  }
 
-  if (data.not_found && data.not_found.length > 0) {
-    html += '<div class="bg-amber/10 border-2 border-amber/20 rounded-3xl px-5 py-4 mb-5">' +
-      '<p class="text-xs font-bold text-amber-dark uppercase tracking-wider mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>Не найдено</p>' +
-      '<p class="text-sm font-bold text-espresso/50">' + data.not_found.join(', ') + '</p>' +
-    '</div>';
-  }
+    // Savings or value banner
+    if (tdata.savings > 0) {
+      html += '<div class="' + tc.light + ' border-2 rounded-3xl px-5 py-4 mb-5 flex items-center gap-3 fade-in" style="border-color:' + tc.accentHex + '33">' +
+        '<div class="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0" style="background:' + tc.accentHex + '">' +
+          '<i class="fas fa-piggy-bank text-white text-sm"></i>' +
+        '</div>' +
+        '<div>' +
+          '<p class="text-xs font-bold uppercase tracking-wider mb-0.5" style="color:' + tc.accentHex + 'cc">Вы экономите</p>' +
+          '<p class="font-black text-xl" style="color:' + tc.accentHex + 'dd">' + fmtPrice(tdata.savings / 100) + '</p>' +
+        '</div>' +
+      '</div>';
+    } else if (tdata.savings < 0) {
+      html += '<div class="' + tc.light + ' border-2 rounded-3xl px-5 py-4 mb-5 flex items-center gap-3 fade-in" style="border-color:' + tc.accentHex + '33">' +
+        '<div class="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0" style="background:' + tc.accentHex + '">' +
+          '<i class="fas fa-up-long text-white text-sm"></i>' +
+        '</div>' +
+        '<div>' +
+          '<p class="text-xs font-bold uppercase tracking-wider mb-0.5" style="color:' + tc.accentHex + 'cc">Доплата за объём</p>' +
+          '<p class="font-black text-xl" style="color:' + tc.accentHex + 'dd">+' + fmtPrice(Math.abs(tdata.savings) / 100) + '</p>' +
+        '</div>' +
+      '</div>';
+    }
 
-  if (combos.length > 0) {
-    for (var ci = 0; ci < combos.length; ci++) {
-      var combo = combos[ci];
-      html += '<div class="mb-4">' +
-        '<div class="flex items-center gap-2 mb-2.5">' +
-          '<div class="w-6 h-6 bg-amber rounded-lg flex items-center justify-center flex-shrink-0">' +
-            '<i class="fas fa-tags text-white text-[9px]"></i>' +
+    // Upgrade tip
+    if (tdata.upgrade_tip) {
+      html += '<div class="' + tc.light + ' border-2 rounded-3xl px-5 py-4 mb-5 flex items-center gap-3 fade-in" style="border-color:' + tc.accentHex + '33">' +
+        '<div class="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0" style="background:' + tc.accentHex + '">' +
+          '<i class="fas fa-arrow-up text-white text-sm"></i>' +
+        '</div>' +
+        '<div class="flex-1">' +
+          '<p class="text-xs font-bold uppercase tracking-wider mb-0.5" style="color:' + tc.accentHex + 'cc">Замена</p>' +
+          '<p class="text-sm font-bold text-espresso leading-snug">' + escHtml(tdata.upgrade_tip) + '</p>' +
+        '</div>' +
+      '</div>';
+    }
+
+    // Order items summary
+    if (tdata.order_items && tdata.order_items.length > 0) {
+      var itemCounts = {};
+      tdata.order_items.forEach(function(n) { itemCounts[n] = (itemCounts[n] || 0) + 1; });
+      var parts = [];
+      for (var iname in itemCounts) {
+        parts.push(iname + (itemCounts[iname] > 1 ? ' x' + itemCounts[iname] : ''));
+      }
+      html += '<div class="bg-espresso/3 rounded-2xl px-4 py-3 mb-5">' +
+        '<p class="text-[10px] font-bold text-espresso/25 uppercase tracking-wider mb-1">Состав заказа</p>' +
+        '<p class="text-xs font-bold text-espresso/50">' + parts.join(', ') + '</p>' +
+      '</div>';
+    }
+
+    // Combos
+    if (combos.length > 0) {
+      for (var ci = 0; ci < combos.length; ci++) {
+        var combo = combos[ci];
+        html += '<div class="mb-4">' +
+          '<div class="flex items-center gap-2 mb-2.5">' +
+            '<div class="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style="background:' + tc.accentHex + '">' +
+              '<i class="fas fa-tags text-white text-[9px]"></i>' +
+            '</div>' +
+            '<h4 class="font-extrabold text-espresso text-sm">' + combo.name + '</h4>' +
+            '<span class="ml-auto text-xs font-black px-2.5 py-1 rounded-xl" style="background:' + tc.accentHex + '1a;color:' + tc.accentHex + 'dd">' + fmtPrice(combo.effective_price_kopecks / 100) + '</span>' +
           '</div>' +
-          '<h4 class="font-extrabold text-espresso text-sm">' + combo.name + '</h4>' +
-          '<span class="ml-auto bg-amber/10 text-amber-dark text-xs font-black px-2.5 py-1 rounded-xl">' + fmtPrice(combo.effective_price_kopecks / 100) + '</span>' +
-        '</div>' +
-        '<div class="bg-white rounded-2xl border border-espresso/5 overflow-hidden shadow-sm" style="border-left: 3px solid #F59E0B;">' +
-          '<div class="px-4 py-3 space-y-2">';
+          '<div class="bg-white rounded-2xl border border-espresso/5 overflow-hidden shadow-sm" style="border-left: 3px solid ' + tc.accentHex + ';">' +
+            '<div class="px-4 py-3 space-y-2">';
 
-      var comboItems = combo.items || [];
-      for (var ii = 0; ii < comboItems.length; ii++) {
-        var item = comboItems[ii];
-        var isChanged = item.wanted !== item.selected;
-        var isSauce = item.is_sauce;
-        var dotClass = isSauce ? 'bg-sage/40' : (isChanged ? 'bg-amber' : 'bg-espresso/15');
-        html += '<div class="flex items-center gap-2">' +
-          '<div class="w-1.5 h-1.5 rounded-full flex-shrink-0 ' + dotClass + '"></div>' +
-          '<div class="flex-1 min-w-0">';
-        if (isSauce) {
-          html += '<span class="text-xs font-bold text-espresso/30">' + item.selected + '</span>';
-        } else if (isChanged) {
-          html += '<span class="text-xs font-bold text-espresso/40 line-through">' + item.wanted + '</span> <i class="fas fa-arrow-right text-[8px] text-amber mx-0.5"></i> <span class="text-xs font-extrabold text-espresso">' + item.selected + '</span>';
-        } else {
-          html += '<span class="text-xs font-bold text-espresso">' + item.selected + '</span>';
+        var comboItems = combo.items || [];
+        for (var ii = 0; ii < comboItems.length; ii++) {
+          var item = comboItems[ii];
+          var isChanged = item.wanted !== item.selected;
+          var isSauce = item.is_sauce;
+          var dotClass = isSauce ? 'bg-sage/40' : (isChanged ? tc.dot : 'bg-espresso/15');
+          html += '<div class="flex items-center gap-2">' +
+            '<div class="w-1.5 h-1.5 rounded-full flex-shrink-0 ' + dotClass + '"></div>' +
+            '<div class="flex-1 min-w-0">';
+          if (isSauce) {
+            html += '<span class="text-xs font-bold text-espresso/30">' + item.selected + '</span>';
+          } else if (isChanged) {
+            html += '<span class="text-xs font-bold text-espresso/40 line-through">' + item.wanted + '</span> <i class="fas fa-arrow-right text-[8px] mx-0.5" style="color:' + tc.accentHex + '"></i> <span class="text-xs font-extrabold text-espresso">' + item.selected + '</span>';
+          } else {
+            html += '<span class="text-xs font-bold text-espresso">' + item.selected + '</span>';
+          }
+          html += '</div></div>';
         }
-        html += '</div></div>';
+        html += '</div></div></div>';
       }
-      html += '</div></div></div>';
     }
-  }
 
-  var monoEntries = Object.entries(monoCoupons);
-  if (monoEntries.length > 0) {
-    html += '<div class="mb-4">';
-    html += '<div class="flex items-center gap-2 mb-2.5">' +
-      '<div class="w-6 h-6 bg-sage rounded-lg flex items-center justify-center flex-shrink-0">' +
-        '<i class="fas fa-ticket text-white text-[9px]"></i>' +
-      '</div>' +
-      '<h4 class="font-extrabold text-espresso text-sm">Купоны</h4>' +
-    '</div>';
-    for (var mi = 0; mi < monoEntries.length; mi++) {
-      var entry = monoEntries[mi];
-      var name = entry[0], info = entry[1];
-      html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3" style="border-left: 3px solid #10B981;">' +
-        '<div class="flex-1 min-w-0">' +
-          '<p class="font-bold text-sage-dark text-xs truncate">' + name + (info.count > 1 ? ' x' + info.count : '') + '</p>' +
-          '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + info.coupon_name + '</p>' +
+    // Mono-coupons
+    var monoEntries = Object.entries(monoCoupons);
+    if (monoEntries.length > 0) {
+      html += '<div class="mb-4">';
+      html += '<div class="flex items-center gap-2 mb-2.5">' +
+        '<div class="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style="background:' + tc.accentHex + '">' +
+          '<i class="fas fa-ticket text-white text-[9px]"></i>' +
         '</div>' +
-        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(info.price_kopecks / 100 * (info.count || 1)) + '</span>' +
+        '<h4 class="font-extrabold text-espresso text-sm">Купоны</h4>' +
       '</div>';
-    }
-    html += '</div>';
-  }
-
-  var multiCoupons = plan.multi_coupons || [];
-  if (multiCoupons.length > 0) {
-    html += '<div class="mb-4">';
-    html += '<div class="flex items-center gap-2 mb-2.5">' +
-      '<div class="w-6 h-6 bg-sage/20 rounded-lg flex items-center justify-center flex-shrink-0">' +
-        '<i class="fas fa-tags text-sage-dark text-[9px]"></i>' +
-      '</div>' +
-      '<h4 class="font-extrabold text-espresso text-sm">Мульти-купон</h4>' +
-    '</div>';
-    for (var mi = 0; mi < multiCoupons.length; mi++) {
-      var mc = multiCoupons[mi];
-      var itemsHtml = '';
-      for (var mci = 0; mci < mc.items.length; mci++) {
-        var miName = mc.items[mci].name;
-        var miCount = mc.items[mci].count || 1;
-        itemsHtml += '<p class="font-bold text-espresso text-xs truncate">' + miName + (miCount > 1 ? ' x' + miCount : '') + '</p>';
+      for (var mi = 0; mi < monoEntries.length; mi++) {
+        var entry = monoEntries[mi];
+        var name = entry[0], info = entry[1];
+        html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3" style="border-left: 3px solid ' + tc.accentHex + ';">' +
+          '<div class="flex-1 min-w-0">' +
+            '<p class="font-bold text-espresso text-xs truncate">' + name + (info.count > 1 ? ' x' + info.count : '') + '</p>' +
+            '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + info.coupon_name + '</p>' +
+          '</div>' +
+          '<span class="font-black text-espresso text-sm">' + fmtPrice(info.price_kopecks / 100 * (info.count || 1)) + '</span>' +
+        '</div>';
       }
-      html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3" style="border-left: 3px solid #10B981;">' +
-        '<div class="flex-1 min-w-0">' +
-          '<p class="font-bold text-sage-dark text-xs mb-1">' + mc.name + '</p>' +
-          itemsHtml +
-        '</div>' +
-        '<span class="font-black text-sage-dark text-sm">' + fmtPrice(mc.price_kopecks / 100) + '</span>' +
-      '</div>';
+      html += '</div>';
     }
-    html += '</div>';
-  }
 
-  var remainingEntries = Object.entries(remaining);
-  if (remainingEntries.length > 0) {
-    html += '<div class="mb-4">';
-    html += '<div class="flex items-center gap-2 mb-2.5">' +
-      '<div class="w-6 h-6 bg-espresso/10 rounded-lg flex items-center justify-center flex-shrink-0">' +
-        '<i class="fas fa-receipt text-espresso/30 text-[9px]"></i>' +
-      '</div>' +
-      '<h4 class="font-extrabold text-espresso text-sm">Отдельно</h4>' +
-    '</div>';
-    for (var ri = 0; ri < remainingEntries.length; ri++) {
-      var entry = remainingEntries[ri];
-      var name = entry[0], info = entry[1];
-      var priceDisplay = info.combo_only
-        ? '<span class="font-black text-espresso text-[10px] text-sage">только в комбо</span>'
-        : '<span class="font-black text-espresso text-sm">' + fmtPrice(info.price_kopecks / 100 * (info.count || 1)) + '</span>';
-      html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3">' +
-        '<div class="flex-1 min-w-0">' +
-          '<p class="font-bold text-espresso text-xs truncate">' + name + (info.count > 1 ? ' x' + info.count : '') + '</p>' +
-          (info.coupon ? '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + info.coupon + '</p>' : '') +
-        '</div>' +
-        priceDisplay +
-      '</div>';
+    // Multi-coupons
+    var multiCoupons = plan.multi_coupons || [];
+    if (multiCoupons.length > 0) {
+      html += '<div class="mb-4">';
+      for (var mi = 0; mi < multiCoupons.length; mi++) {
+        var mc = multiCoupons[mi];
+        var itemsHtml = '';
+        for (var mci = 0; mci < mc.items.length; mci++) {
+          var miName = mc.items[mci].name;
+          var miCount = mc.items[mci].count || 1;
+          itemsHtml += '<p class="font-bold text-espresso text-xs truncate">' + miName + (miCount > 1 ? ' x' + miCount : '') + '</p>';
+        }
+        html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3" style="border-left: 3px solid ' + tc.accentHex + ';">' +
+          '<div class="flex-1 min-w-0">' +
+            '<p class="font-bold text-espresso text-xs mb-1">' + mc.name + '</p>' +
+            itemsHtml +
+          '</div>' +
+          '<span class="font-black text-espresso text-sm">' + fmtPrice(mc.price_kopecks / 100) + '</span>' +
+        '</div>';
+      }
+      html += '</div>';
     }
-    html += '</div>';
+
+    // Remaining
+    var remainingEntries = Object.entries(remaining);
+    if (remainingEntries.length > 0) {
+      html += '<div class="mb-4">';
+      html += '<div class="flex items-center gap-2 mb-2.5">' +
+        '<div class="w-6 h-6 bg-espresso/10 rounded-lg flex items-center justify-center flex-shrink-0">' +
+          '<i class="fas fa-receipt text-espresso/30 text-[9px]"></i>' +
+        '</div>' +
+        '<h4 class="font-extrabold text-espresso text-sm">Отдельно</h4>' +
+      '</div>';
+      for (var ri = 0; ri < remainingEntries.length; ri++) {
+        var entry = remainingEntries[ri];
+        var name = entry[0], info = entry[1];
+        var priceDisplay = info.combo_only
+          ? '<span class="font-black text-[10px]" style="color:' + tc.accentHex + '">только в комбо</span>'
+          : '<span class="font-black text-espresso text-sm">' + fmtPrice(info.price_kopecks / 100 * (info.count || 1)) + '</span>';
+        html += '<div class="bg-white rounded-2xl border border-espresso/5 px-4 py-3 mb-2 shadow-sm flex items-center gap-3">' +
+          '<div class="flex-1 min-w-0">' +
+            '<p class="font-bold text-espresso text-xs truncate">' + name + (info.count > 1 ? ' x' + info.count : '') + '</p>' +
+            (info.coupon ? '<p class="text-[10px] text-espresso/30 font-bold mt-0.5">' + info.coupon + '</p>' : '') +
+          '</div>' +
+          priceDisplay +
+        '</div>';
+      }
+      html += '</div>';
+    }
+
+    content.innerHTML = html;
   }
 
-  if (data.stats) {
-    var s = data.stats;
-    html += '<div class="bg-espresso/3 rounded-2xl px-4 py-3 mt-2">' +
-      '<p class="text-[10px] font-bold text-espresso/25 uppercase tracking-wider mb-2">Статистика</p>' +
-      '<div class="grid grid-cols-3 gap-2 text-center">' +
-        '<div><p class="font-black text-espresso text-sm">' + (s.menu_items_total || 0) + '</p><p class="text-[9px] font-bold text-espresso/30">блюд в меню</p></div>' +
-        '<div><p class="font-black text-espresso text-sm">' + (s.combos_total || 0) + '</p><p class="text-[9px] font-bold text-espresso/30">комбо</p></div>' +
-        '<div><p class="font-black text-espresso text-sm">' + (s.combos_relevant || 0) + '</p><p class="text-[9px] font-bold text-espresso/30">релевантных</p></div>' +
-      '</div>' +
-    '</div>';
+  function buildTabs() {
+    var tabHtml = '<div class="flex gap-2 mb-5 overflow-x-auto">';
+    for (var i = 0; i < tiers.length; i++) {
+      var t = tiers[i];
+      if (!t) continue;
+      var tc = tierColors[i];
+      var isActive = i === activeTier;
+      var btnClass = isActive
+        ? tc.btnActive + ' shadow-sm'
+        : 'bg-white border border-espresso/10 text-espresso/40 hover:border-espresso/30';
+      tabHtml += '<button class="flex-1 text-center text-xs font-black py-2.5 px-3 rounded-xl transition-all duration-200 ' + btnClass + '" data-tier="' + i + '">' + t.name + '</button>';
+    }
+    tabHtml += '</div><div id="tierContent"></div>';
+    return tabHtml;
   }
 
-  content.innerHTML = html;
+  content.innerHTML = buildTabs();
+  renderTier(activeTier);
+
+  content.querySelectorAll('[data-tier]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      activeTier = parseInt(this.getAttribute('data-tier'));
+      // Rebuild tabs and render
+      var outerHtml = buildTabs();
+      content.innerHTML = outerHtml;
+      renderTier(activeTier);
+      content.querySelectorAll('[data-tier]').forEach(function(b) {
+        b.addEventListener('click', function() {
+          activeTier = parseInt(this.getAttribute('data-tier'));
+          var oh = buildTabs();
+          content.innerHTML = oh;
+          renderTier(activeTier);
+          content.querySelectorAll('[data-tier]').forEach(function(bb) {
+            bb.addEventListener('click', arguments.callee);
+          });
+        });
+      });
+    });
+  });
+
   sheet.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
 }

@@ -4,6 +4,14 @@ from itertools import combinations
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
+# Force UTF-8 for stdout/stderr to avoid cp1251 encode errors
+if sys.stdout and hasattr(sys.stdout, 'buffer'):
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr and hasattr(sys.stderr, 'buffer'):
+    import io
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 
@@ -391,12 +399,17 @@ def optimize_api(wanted_list, restaurant_id="1002", mode="auto"):
     return result
 
 
-def build_frontend_response(result):
-    best_total, savings, best_state, menu_total, menu_prices, effective_prices, mono_plan, dish_idx, order = result
-    mono_used_items, best_combo, final_remaining, detail_combos, best_costs = best_state
+def _build_tier_plan(tier_data, original_menu_total_kop):
+    """Build a frontend tier response from a single tier's data dict."""
+    if tier_data is None:
+        return None
 
-    menu_total_kop = round(menu_total * 100)
-    best_total_kop = round(best_costs["total"] * 100)
+    best_state = tier_data["best_state"]
+    effective_prices = tier_data["best_eff"]
+    mono_plan = tier_data["best_mono"]
+    menu_prices = tier_data["menu_prices"]
+
+    mono_used_items, best_combo, final_remaining, detail_combos, best_costs = best_state
 
     combos_list = []
     for dc in detail_combos:
@@ -439,17 +452,40 @@ def build_frontend_response(result):
 
     saving_tip = best_costs.get("saving_tip", "")
 
+    best_total_kop = round(tier_data["best_total"] * 100)
+    savings_kop = round(tier_data["savings"] * 100)
+
     return {
-        "menu_total": menu_total_kop,
+        "name": tier_data["name"],
+        "menu_total": original_menu_total_kop,
         "best_total": best_total_kop,
-        "savings": round(savings * 100),
+        "savings": savings_kop,
         "saving_tip": saving_tip,
+        "upgrade_tip": tier_data.get("upgrade_tip", ""),
+        "order_items": tier_data.get("order_items", []),
         "plan": {
             "combos": combos_list,
             "mono_coupons": mono_coupons,
             "multi_coupons": multi_coupons,
             "remaining": remaining,
         },
+    }
+
+
+def build_frontend_response(result):
+    tiers_raw = result.get("tiers", [])
+    original_menu_total = result.get("original_menu_total", 0)
+    original_menu_total_kop = round(original_menu_total * 100)
+
+    tiers = []
+    for t in tiers_raw:
+        built = _build_tier_plan(t, original_menu_total_kop)
+        if built is not None:
+            tiers.append(built)
+
+    return {
+        "tiers": tiers,
+        "original_menu_total": original_menu_total_kop,
     }
 
 
