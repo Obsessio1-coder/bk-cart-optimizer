@@ -962,7 +962,7 @@ function showResult(data) {
       html += '</div>';
     }
 
-    content.innerHTML = html;
+    document.getElementById('tierContent').innerHTML = html;
   }
 
   function buildTabs() {
@@ -984,25 +984,17 @@ function showResult(data) {
   content.innerHTML = buildTabs();
   renderTier(activeTier);
 
-  content.querySelectorAll('[data-tier]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      activeTier = parseInt(this.getAttribute('data-tier'));
-      // Rebuild tabs and render
-      var outerHtml = buildTabs();
-      content.innerHTML = outerHtml;
-      renderTier(activeTier);
-      content.querySelectorAll('[data-tier]').forEach(function(b) {
-        b.addEventListener('click', function() {
-          activeTier = parseInt(this.getAttribute('data-tier'));
-          var oh = buildTabs();
-          content.innerHTML = oh;
-          renderTier(activeTier);
-          content.querySelectorAll('[data-tier]').forEach(function(bb) {
-            bb.addEventListener('click', arguments.callee);
-          });
-        });
-      });
+  content.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-tier]');
+    if (!btn) return;
+    activeTier = parseInt(btn.getAttribute('data-tier'));
+    content.querySelectorAll('[data-tier]').forEach(function(b, idx) {
+      var tc = tierColors[idx];
+      var isActive = idx === activeTier;
+      b.className = 'flex-1 text-center text-xs font-black py-2.5 px-3 rounded-xl transition-all duration-200 ' +
+        (isActive ? tc.btnActive + ' shadow-sm' : 'bg-white border border-espresso/10 text-espresso/40 hover:border-espresso/30');
     });
+    renderTier(activeTier);
   });
 
   sheet.classList.remove('hidden');
