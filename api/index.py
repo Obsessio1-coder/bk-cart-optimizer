@@ -534,18 +534,22 @@ def _load_struct_items():
     Returns:
         coupon_did_names: dish_ids found in struct['coupons']
         combo_only_did_names: dish_ids found ONLY in struct['combos'] (not in coupons)
+        coupon_code_by_did: dict mapping dish_id -> set of coupon codes that contain it
+        parent_combos_by_did: dict mapping dish_id -> set of combo ids that contain it
     """
     import os
     struct_path = os.path.join(BASE_DIR, "combo_structures.json")
     if not os.path.exists(struct_path):
-        return {}, {}
+        return {}, {}, {}, {}
     with open(struct_path, "r", encoding="utf-8") as f:
         struct = json.load(f)
 
     all_did_names = {}
     coupon_did_names = {}
+    coupon_code_by_did = {}
 
-    for entry in struct.get("coupons", {}).values():
+    for code, entry in struct.get("coupons", {}).items():
+        code_str = str(code)
         for slot in entry.get("slots", []):
             for d in slot.get("dishes", []):
                 did = d.get("dish_id")
@@ -553,15 +557,19 @@ def _load_struct_items():
                     name = d.get("name") or d.get("menu_name")
                     coupon_did_names[did] = name
                     all_did_names[did] = name
+                    coupon_code_by_did.setdefault(did, set()).add(code_str)
             for opt in slot.get("options", []):
                 did = opt.get("dish_id")
                 if did:
                     name = opt.get("name") or opt.get("menu_name")
                     coupon_did_names[did] = name
                     all_did_names[did] = name
+                    coupon_code_by_did.setdefault(did, set()).add(code_str)
 
     combo_only_did_names = {}
-    for entry in struct.get("combos", {}).values():
+    parent_combos_by_did = {}
+    for cid, entry in struct.get("combos", {}).items():
+        cid_str = str(cid)
         for slot in entry.get("slots", []):
             for d in slot.get("dishes", []):
                 did = d.get("dish_id")
@@ -569,14 +577,16 @@ def _load_struct_items():
                     name = d.get("name") or d.get("menu_name")
                     combo_only_did_names[did] = name
                     all_did_names[did] = name
+                    parent_combos_by_did.setdefault(did, set()).add(cid_str)
             for opt in slot.get("options", []):
                 did = opt.get("dish_id")
                 if did and did not in all_did_names:
                     name = opt.get("name") or opt.get("menu_name")
                     combo_only_did_names[did] = name
                     all_did_names[did] = name
+                    parent_combos_by_did.setdefault(did, set()).add(cid_str)
 
-    return coupon_did_names, combo_only_did_names
+    return coupon_did_names, combo_only_did_names, coupon_code_by_did, parent_combos_by_did
 
 
 _NON_FOOD_KEYWORDS = [
@@ -695,8 +705,22 @@ def get_menu():
                 })
 
         # Add items from combo structures (not in regular menu)
-        coupon_did_names, combo_only_did_names = _load_struct_items()
+        coupon_did_names, combo_only_did_names, coupon_code_by_did, parent_combos_by_did = _load_struct_items()
         seen_added_names = set()
+
+        # Build set of coupon codes that exist at this restaurant
+        restaurant_coupon_codes = set()
+        for c in menu.get("general_coupons", []):
+            code = c.get("code", "")
+            if code:
+                restaurant_coupon_codes.add(str(code))
+
+        # Build set of combo IDs that exist at this restaurant
+        restaurant_combo_ids = set()
+        for c in menu.get("combos", []):
+            cid = c.get("main_info", {}).get("id")
+            if cid:
+                restaurant_combo_ids.add(str(cid))
 
         # Items from coupons -> "только в купонах"
         for did, cname in sorted(coupon_did_names.items(), key=lambda x: x[1]):
@@ -708,12 +732,16 @@ def get_menu():
             if name_key in seen_added_names:
                 continue
             seen_added_names.add(name_key)
+            # Only show as coupon_only if at least one parent coupon exists at this restaurant
+            parent_coupons = coupon_code_by_did.get(did, set())
+            is_available = bool(parent_coupons & restaurant_coupon_codes)
             items.append({
                 "name": cname,
                 "price_kopecks": 0,
                 "groups": _categorize_coupon_item(cname),
-                "card_type": "coupon_only",
-                "coupon_only": True,
+                "card_type": "coupon_only" if is_available else "absent",
+                "coupon_only": True if is_available else False,
+                "absent": False if is_available else True,
             })
 
         # Items only in combo structures (not in menu, not in coupons) -> absent
@@ -739,6 +767,34 @@ def get_menu():
 
     except FileNotFoundError:
         return jsonify({"error": f"Меню для ресторана {restaurant_id} не найдено. Сервер не может загрузить данные временно."}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/menu/<rid>", methods=["GET"])
+def serve_menu_json(rid):
+    path = os.path.join(BASE_DIR, "bk_all_menus", f"menu_{rid}.json")
+    if not os.path.exists(path):
+        return jsonify({"error": f"Меню для ресторана {rid} не найдено"}), 404
+    try:
+        with open(path, encoding="utf-8") as f:
+            m = json.load(f)
+        result = m.get("result") or m
+        menu = {
+            "combos": [
+                {"id": c["main_info"]["id"], "name": c["main_info"]["name"], "price": c["main_info"]["price"]}
+                for c in result.get("combos", [])
+            ],
+            "coupons": [
+                {"code": c.get("code", ""), "id": c["main_info"]["id"], "name": c["main_info"]["name"], "price": c["main_info"]["price"]}
+                for c in result.get("general_coupons", [])
+            ],
+            "dishes": [
+                {"id": d["main_info"]["id"], "name": d["main_info"]["name"], "price": d["main_info"]["price"]}
+                for d in result.get("dishes", [])
+            ],
+        }
+        return jsonify(menu)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

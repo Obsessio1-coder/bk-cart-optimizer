@@ -455,20 +455,28 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
         slots = struct_entry.get("slots", [])
         if len(slots) < 2:
             continue
-        dish_id_sets = [set(d.get("dish_id") for d in s.get("dishes", []) if d.get("dish_id")) for s in slots]
+        # Filter slot dishes against restaurant menu
+        def _filter_slot_dishes(slot):
+            return [d for d in slot.get("dishes", [])
+                    if d.get("dish_id") and d["dish_id"] in menu_by_id
+                    and menu_by_id[d["dish_id"]]["price"] > 0]
+
+        filtered_slot_dishes = [_filter_slot_dishes(s) for s in slots]
+        dish_id_sets = [set(d["dish_id"] for d in fd) for fd in filtered_slot_dishes]
+        if any(not s for s in dish_id_sets):
+            continue
         common = dish_id_sets[0]
         for s_set in dish_id_sets[1:]:
             common = common & s_set
         if not common:
             continue
         slot_price_maps = []
-        for s in slots:
+        for fd in filtered_slot_dishes:
             pm = {}
-            for d in s.get("dishes", []):
-                did = d.get("dish_id")
+            for d in fd:
                 p = d.get("price", 0)
-                if did and p > 0:
-                    pm[did] = p
+                if p > 0:
+                    pm[d["dish_id"]] = p
             slot_price_maps.append(pm)
 
         multi_mono_coupons.append({
@@ -497,20 +505,28 @@ def _optimize_cart(order, menu, struct, rid, dish_idx, menu_by_id, menu_id_set, 
         slots = struct_entry.get("slots", [])
         if len(slots) < 2:
             continue
-        dish_id_sets = [set(d.get("dish_id") for d in s.get("dishes", []) if d.get("dish_id")) for s in slots]
+        # Filter slot dishes against restaurant menu (reuse helper)
+        def _filter_slot_dishes(slot):
+            return [d for d in slot.get("dishes", [])
+                    if d.get("dish_id") and d["dish_id"] in menu_by_id
+                    and menu_by_id[d["dish_id"]]["price"] > 0]
+
+        filtered_slot_dishes = [_filter_slot_dishes(s) for s in slots]
+        dish_id_sets = [set(d["dish_id"] for d in fd) for fd in filtered_slot_dishes]
+        if any(not s for s in dish_id_sets):
+            continue
         common = dish_id_sets[0]
         for s_set in dish_id_sets[1:]:
             common = common & s_set
         if common:
             continue  # already handled by multi_mono_coupons
         slot_price_maps = []
-        for s in slots:
+        for fd in filtered_slot_dishes:
             pm = {}
-            for d in s.get("dishes", []):
-                did = d.get("dish_id")
+            for d in fd:
                 p = d.get("price", 0)
-                if did and p > 0:
-                    pm[did] = p
+                if p > 0:
+                    pm[d["dish_id"]] = p
             slot_price_maps.append(pm)
 
         diverse_multi_coupons.append({
