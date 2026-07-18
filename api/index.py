@@ -708,6 +708,16 @@ def get_menu():
         for item in items:
             seen_added_names.add(item["name"].lower().strip())
 
+        # Build a set of normalized (size-stripped) names from regular menu items
+        _SIZE_QUALIFIERS = (" малый", " стандартный", " большой", " рожок", " классика", " MAXX")
+        def _strip_size(name):
+            nl = name.lower().strip()
+            for q in _SIZE_QUALIFIERS:
+                if nl.endswith(q):
+                    return nl[:-len(q)].strip()
+            return nl
+        regular_normalized = {_strip_size(item["name"]) for item in items}
+
         # Build set of coupon codes that exist at this restaurant
         restaurant_coupon_codes = set()
         # Build set of dish_ids directly referenced in restaurant coupons (mono-coupons)
@@ -729,6 +739,10 @@ def get_menu():
                 continue
             name_key = cname.lower().strip()
             if name_key in seen_added_names:
+                continue
+            # If the struct item is a size variant of a regular menu item (same base name),
+            # skip it — the regular item already covers it
+            if _strip_size(cname) in regular_normalized:
                 continue
             seen_added_names.add(name_key)
             parent_coupons = coupon_code_by_did.get(did, set())
